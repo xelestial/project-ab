@@ -638,6 +638,80 @@ export async function registerRoutes(
     },
   );
 
+  // ── Unit options (protected) ─────────────────────────────────────────────
+
+  // GET /api/v1/rooms/:gameId/unit-options?playerId=X&unitId=Y
+  // Returns valid moves, attack range, and unit stats for a given unit
+  fastify.get<{ Params: { gameId: string }; Querystring: { playerId: string; unitId: string } }>(
+    "/api/v1/rooms/:gameId/unit-options",
+    { preHandler: requireAuth },
+    async (req, reply) => {
+      const session = sessionManager.getSession(req.params["gameId"]);
+      if (session === undefined) return reply.code(404).send({ error: "Game not found" });
+
+      const { playerId, unitId } = req.query;
+      const unit = session.state.units[unitId];
+      if (unit === undefined) return reply.code(404).send({ error: "Unit not found" });
+
+      const { movementValidator, attackValidator } = session.context;
+
+      // Reachable movement tiles
+      const reachableTiles = unit.actionsUsed.moved
+        ? []
+        : movementValidator.getReachableTiles(unit, session.state);
+
+      // Attack range (all tiles in weapon range, valid targets)
+      const attackableTiles = unit.actionsUsed.attacked
+        ? []
+        : attackValidator.getAttackableTargets(unit, session.state);
+
+      // Enemy positions that are actually attackable
+      const enemyPositions = attackableTiles.filter((pos) =>
+        Object.values(session.state.units).some(
+          (u) => u.alive && u.playerId !== playerId && u.position.row === pos.row && u.position.col === pos.col,
+        ),
+      );
+
+      // Unit metadata + weapon stats
+      try {
+        const unitMeta = registry.getUnit(unit.metaId);
+        const weapon = registry.getWeapon(unitMeta.primaryWeaponId);
+
+        return reply.code(200).send({
+          reachableTiles,
+          attackableTiles,
+          enemyPositions,
+          canMove: !unit.actionsUsed.moved,
+          canAttack: !unit.actionsUsed.attacked,
+          unitInfo: {
+            unitId: unit.unitId,
+            metaId: unit.metaId,
+            nameKey: unitMeta.nameKey,
+            class: unitMeta.class,
+            currentHealth: unit.currentHealth,
+            maxHealth: unitMeta.baseHealth,
+            currentArmor: unit.currentArmor,
+            baseArmor: unitMeta.baseArmor,
+            movementPoints: unit.movementPoints,
+            baseMovement: unitMeta.baseMovement,
+            activeEffects: unit.activeEffects,
+            actionsUsed: unit.actionsUsed,
+            weapon: {
+              name: weapon.nameKey,
+              damage: weapon.damage,
+              minRange: weapon.minRange,
+              maxRange: weapon.maxRange,
+              attackType: weapon.attackType,
+              attribute: weapon.attribute,
+            },
+          },
+        });
+      } catch {
+        return reply.code(500).send({ error: "Unit metadata not found" });
+      }
+    },
+  );
+
   // ── Matchmaking (protected) ───────────────────────────────────────────────
 
   /**

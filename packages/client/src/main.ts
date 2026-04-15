@@ -235,6 +235,29 @@ function drawUnit(
   ctx.globalAlpha = 1;
 }
 
+interface UnitInfoData {
+  unitId: string;
+  metaId: string;
+  nameKey: string;
+  class: string;
+  currentHealth: number;
+  maxHealth: number;
+  currentArmor: number;
+  baseArmor: number;
+  movementPoints: number;
+  baseMovement: number;
+  activeEffects: Array<{ effectType: string; turnsRemaining: number }>;
+  actionsUsed: { moved: boolean; attacked: boolean; skillUsed: boolean; extinguished: boolean };
+  weapon: {
+    name: string;
+    damage: number;
+    minRange: number;
+    maxRange: number;
+    attackType: string;
+    attribute: string;
+  };
+}
+
 interface RenderOpts {
   gridSize: number;
   baseTile?: string;
@@ -249,6 +272,10 @@ interface RenderOpts {
   highlightHalf?: number; // teamIndex whose half to highlight (placement phase)
   placedUnits?: PlacedUnit[];
   hoveredCell?: { row: number; col: number } | null;
+  moveTiles?: Array<{ row: number; col: number }>;       // blue - can move here
+  attackRangeTiles?: Array<{ row: number; col: number }>; // dim red - attack range (no enemy)
+  attackTargetTiles?: Array<{ row: number; col: number }>; // bright red - enemy in range
+  selectedPos?: { row: number; col: number } | null;     // yellow glow - selected unit
 }
 
 function renderIso(canvas: HTMLCanvasElement, opts: RenderOpts): void {
@@ -314,6 +341,61 @@ function renderIso(canvas: HTMLCanvasElement, opts: RenderOpts): void {
     }
 
     drawTile(ctx, sx, sy, p.HW, p.HH, p.DEPTH, finalTop, finalSide);
+
+    // Move range highlight (blue)
+    if (opts.moveTiles?.some(t => t.row === row && t.col === col)) {
+      ctx.beginPath();
+      ctx.moveTo(sx, sy);
+      ctx.lineTo(sx + p.HW, sy + p.HH);
+      ctx.lineTo(sx, sy + p.HH * 2);
+      ctx.lineTo(sx - p.HW, sy + p.HH);
+      ctx.closePath();
+      ctx.fillStyle = "rgba(80, 160, 255, 0.45)";
+      ctx.fill();
+      ctx.strokeStyle = "rgba(80, 160, 255, 0.9)";
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
+    // Attack range (no enemy - dim red)
+    if (opts.attackRangeTiles?.some(t => t.row === row && t.col === col)) {
+      ctx.beginPath();
+      ctx.moveTo(sx, sy);
+      ctx.lineTo(sx + p.HW, sy + p.HH);
+      ctx.lineTo(sx, sy + p.HH * 2);
+      ctx.lineTo(sx - p.HW, sy + p.HH);
+      ctx.closePath();
+      ctx.fillStyle = "rgba(255, 80, 80, 0.2)";
+      ctx.fill();
+      ctx.strokeStyle = "rgba(255, 80, 80, 0.5)";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+    // Attack target (enemy present - bright red)
+    if (opts.attackTargetTiles?.some(t => t.row === row && t.col === col)) {
+      ctx.beginPath();
+      ctx.moveTo(sx, sy);
+      ctx.lineTo(sx + p.HW, sy + p.HH);
+      ctx.lineTo(sx, sy + p.HH * 2);
+      ctx.lineTo(sx - p.HW, sy + p.HH);
+      ctx.closePath();
+      ctx.fillStyle = "rgba(255, 50, 50, 0.55)";
+      ctx.fill();
+      ctx.strokeStyle = "rgba(255, 50, 50, 1.0)";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+    // Selected unit position (yellow glow)
+    if (opts.selectedPos?.row === row && opts.selectedPos?.col === col) {
+      ctx.beginPath();
+      ctx.moveTo(sx, sy);
+      ctx.lineTo(sx + p.HW, sy + p.HH);
+      ctx.lineTo(sx, sy + p.HH * 2);
+      ctx.lineTo(sx - p.HW, sy + p.HH);
+      ctx.closePath();
+      ctx.strokeStyle = "rgba(255, 230, 50, 1.0)";
+      ctx.lineWidth = 3;
+      ctx.stroke();
+    }
 
     // Draw placed unit (placement phase)
     const placedMetaId = placedByPos.get(key);
@@ -788,6 +870,142 @@ async function pollGameState(gameId: string): Promise<void> {
 
 let selectedUnitId: string | null = null;
 let selectedUnitPos: { row: number; col: number } | null = null;
+let moveHighlights: { row: number; col: number }[] = [];
+let attackRangeHighlights: { row: number; col: number }[] = [];
+let attackTargetHighlights: { row: number; col: number }[] = [];
+let selectedGameUnitPos: { row: number; col: number } | null = null;
+
+function clearUnitSelection(): void {
+  selectedUnitId = null;
+  selectedUnitPos = null;
+  selectedGameUnitPos = null;
+  moveHighlights = [];
+  attackRangeHighlights = [];
+  attackTargetHighlights = [];
+}
+
+async function fetchAndShowUnitOptions(
+  unitId: string,
+  pos: { row: number; col: number },
+  state: GameStateSnapshot,
+  gridSize: number,
+): Promise<void> {
+  const token = api.getToken();
+  if (!token || !currentGameId) return;
+
+  selectedUnitId = unitId;
+  selectedGameUnitPos = pos;
+  moveHighlights = [];
+  attackRangeHighlights = [];
+  attackTargetHighlights = [];
+
+  try {
+    const res = await fetch(
+      `${API_BASE}/api/v1/rooms/${currentGameId}/unit-options?playerId=${humanPlayerId}&unitId=${encodeURIComponent(unitId)}`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+    if (res.ok) {
+      const data = await res.json() as {
+        reachableTiles: Array<{ row: number; col: number }>;
+        attackableTiles: Array<{ row: number; col: number }>;
+        enemyPositions: Array<{ row: number; col: number }>;
+        canMove: boolean;
+        canAttack: boolean;
+        unitInfo: UnitInfoData;
+      };
+      moveHighlights = data.canMove ? data.reachableTiles : [];
+      // Attack range = tiles in range WITHOUT enemy (dim)
+      const enemySet = new Set(data.enemyPositions.map(p => `${p.row},${p.col}`));
+      attackRangeHighlights = data.canAttack
+        ? data.attackableTiles.filter(p => !enemySet.has(`${p.row},${p.col}`))
+        : [];
+      attackTargetHighlights = data.canAttack ? data.enemyPositions : [];
+      renderUnitInfoPanel(data.unitInfo);
+    }
+  } catch { /* ignore */ }
+
+  // Re-render board with highlights
+  const activeCanvas = document.getElementById("board-canvas") as HTMLCanvasElement;
+  if (activeCanvas) {
+    const playerIds = Object.keys(state.players);
+    const unitsArr = Object.values(state.units).map((u) => ({
+      metaId: u.metaId as string,
+      playerId: u.playerId as string,
+      position: u.position,
+      alive: u.alive,
+    }));
+    renderIso(activeCanvas, {
+      gridSize,
+      baseTile: state.map.baseTile ?? "plain",
+      tiles: state.map.tiles as unknown as Record<string, { attribute: string }>,
+      units: unitsArr,
+      playerIds,
+      moveTiles: moveHighlights,
+      attackRangeTiles: attackRangeHighlights,
+      attackTargetTiles: attackTargetHighlights,
+      selectedPos: selectedGameUnitPos,
+    });
+  }
+}
+
+function renderUnitInfoPanel(info: UnitInfoData | null): void {
+  const panel = document.getElementById("unit-info-panel");
+  if (!panel) return;
+  if (info === null) {
+    panel.innerHTML = '<div class="unit-info-empty">유닛을 클릭하면 정보가 표시됩니다</div>';
+    return;
+  }
+
+  const hpPct = Math.max(0, Math.min(100, (info.currentHealth / info.maxHealth) * 100));
+  const hpColor = hpPct > 60 ? "#4caf50" : hpPct > 30 ? "#ff9800" : "#f44336";
+
+  const effectsHtml = info.activeEffects.length > 0
+    ? info.activeEffects.map(e =>
+        `<span class="effect-badge effect-${e.effectType}">${e.effectType} ${e.turnsRemaining}턴</span>`
+      ).join("")
+    : '<span class="effect-none">상태 이상 없음</span>';
+
+  const rangeText = info.weapon.minRange === info.weapon.maxRange
+    ? `${info.weapon.maxRange}`
+    : `${info.weapon.minRange}–${info.weapon.maxRange}`;
+
+  const actionsHtml = [
+    info.actionsUsed.moved ? '<span class="action-used">이동 완료</span>' : '',
+    info.actionsUsed.attacked ? '<span class="action-used">공격 완료</span>' : '',
+  ].filter(Boolean).join('') || '<span class="action-avail">행동 가능</span>';
+
+  const unitName = UNIT_NAME_KO[info.metaId] ?? info.metaId;
+  const unitColor = UNIT_COLOR[info.class] ?? "#888";
+
+  panel.innerHTML = `
+    <div class="unit-info-header">
+      <div class="unit-info-icon" style="background:${unitColor}">${UNIT_ABBR[info.metaId] ?? "?"}</div>
+      <div class="unit-info-title">
+        <div class="unit-info-name">${unitName}</div>
+        <div class="unit-info-class">${info.class}</div>
+      </div>
+    </div>
+    <div class="unit-info-hp">
+      <div class="unit-info-label">HP</div>
+      <div class="unit-info-hp-bar">
+        <div class="unit-info-hp-fill" style="width:${hpPct}%;background:${hpColor}"></div>
+      </div>
+      <div class="unit-info-hp-text">${info.currentHealth} / ${info.maxHealth}</div>
+    </div>
+    <div class="unit-info-stats">
+      <div class="stat-row"><span class="stat-label">ATK</span><span class="stat-val">${info.weapon.damage}</span></div>
+      <div class="stat-row"><span class="stat-label">RNG</span><span class="stat-val">${rangeText}</span></div>
+      <div class="stat-row"><span class="stat-label">MOV</span><span class="stat-val">${info.movementPoints}/${info.baseMovement}</span></div>
+      <div class="stat-row"><span class="stat-label">ARM</span><span class="stat-val">${info.currentArmor}</span></div>
+    </div>
+    <div class="unit-info-weapon">
+      <span class="weapon-type weapon-${info.weapon.attackType}">${info.weapon.attackType}</span>
+      <span class="weapon-attr">${info.weapon.attribute}</span>
+    </div>
+    <div class="unit-info-effects">${effectsHtml}</div>
+    <div class="unit-info-actions">${actionsHtml}</div>
+  `;
+}
 
 async function submitAction(action: {
   type: "move" | "attack" | "pass";
@@ -822,9 +1040,13 @@ function renderGame(state: GameStateSnapshot): void {
     alive: u.alive,
   }));
 
-  // Check if it's human's turn
   const slot = state.turnOrder[state.currentTurnIndex];
   const isMyTurn = slot?.playerId === humanPlayerId;
+
+  // Clear selection when turn changes
+  if (!isMyTurn && selectedUnitId !== null) {
+    clearUnitSelection();
+  }
 
   // Turn indicator
   const turnEl = document.getElementById("turn-indicator");
@@ -842,14 +1064,13 @@ function renderGame(state: GameStateSnapshot): void {
   const roundEl = document.getElementById("round-indicator");
   if (roundEl) roundEl.textContent = `Round ${state.round}`;
 
-  // Show/hide pass button
   const passBtn = document.getElementById("pass-btn") as HTMLButtonElement | null;
   if (passBtn) passBtn.style.display = isMyTurn ? "block" : "none";
 
-  // Set up board interaction (clones canvas to remove old listeners)
+  // Set up board interaction
   setupBoardClick(canvas, state, isMyTurn, gridSize);
 
-  // Render on the active canvas (may have been replaced by setupBoardClick)
+  // Render on the active canvas
   const activeCanvas = (document.getElementById("board-canvas") as HTMLCanvasElement) ?? canvas;
   renderIso(activeCanvas, {
     gridSize,
@@ -857,6 +1078,10 @@ function renderGame(state: GameStateSnapshot): void {
     tiles: state.map.tiles as unknown as Record<string, { attribute: string }>,
     units: unitsArr,
     playerIds,
+    moveTiles: moveHighlights,
+    attackRangeTiles: attackRangeHighlights,
+    attackTargetTiles: attackTargetHighlights,
+    selectedPos: selectedGameUnitPos,
   });
 
   renderPlayersList(state, playerIds, slot?.playerId);
@@ -868,13 +1093,11 @@ function setupBoardClick(
   isMyTurn: boolean,
   gridSize: number,
 ): void {
-  // Remove previous listener
   const newCanvas = canvas.cloneNode(true) as HTMLCanvasElement;
   canvas.parentNode?.replaceChild(newCanvas, canvas);
 
-  if (!isMyTurn) return;
+  newCanvas.style.cursor = isMyTurn ? "pointer" : "default";
 
-  newCanvas.style.cursor = "pointer";
   newCanvas.addEventListener("click", (e) => {
     const rect = newCanvas.getBoundingClientRect();
     const p = isoParams(gridSize);
@@ -883,28 +1106,83 @@ function setupBoardClick(
     const { row, col } = screenToGrid(mx, my, p.cx, p.cy, p.HW, p.HH);
     if (row < 0 || row >= gridSize || col < 0 || col >= gridSize) return;
 
-    // Find unit at clicked cell
     const clickedUnit = Object.values(state.units).find(
       (u) => u.alive && u.position.row === row && u.position.col === col,
     );
 
-    if (clickedUnit && clickedUnit.playerId === humanPlayerId) {
-      // Select own unit
-      selectedUnitId = clickedUnit.unitId as string;
-      selectedUnitPos = { row, col };
-      const turnEl = document.getElementById("turn-indicator");
-      if (turnEl) turnEl.textContent = `🟢 ${UNIT_ABBR[clickedUnit.metaId as string] ?? "?"} 선택됨 — 이동/공격할 위치 클릭`;
-    } else if (selectedUnitId !== null) {
-      // Move or attack
-      if (clickedUnit && clickedUnit.playerId !== humanPlayerId) {
-        // Attack
-        void submitAction({ type: "attack", unitId: selectedUnitId, targetPosition: { row, col } });
-      } else {
-        // Move
-        void submitAction({ type: "move", unitId: selectedUnitId, targetPosition: { row, col } });
+    // Always show stats for any clicked unit
+    if (clickedUnit) {
+      const token = api.getToken();
+      if (token && currentGameId) {
+        void fetch(
+          `${API_BASE}/api/v1/rooms/${currentGameId}/unit-options?playerId=${humanPlayerId}&unitId=${encodeURIComponent(clickedUnit.unitId as string)}`,
+          { headers: { Authorization: `Bearer ${token}` } },
+        ).then(r => r.ok ? r.json() : null)
+          .then((data: { unitInfo?: UnitInfoData } | null) => {
+            if (data?.unitInfo) renderUnitInfoPanel(data.unitInfo);
+          })
+          .catch(() => {});
       }
-      selectedUnitId = null;
-      selectedUnitPos = null;
+    }
+
+    if (!isMyTurn) return;
+
+    // Check if clicking a highlighted attack target
+    if (attackTargetHighlights.some(t => t.row === row && t.col === col)) {
+      if (selectedUnitId !== null) {
+        void submitAction({ type: "attack", unitId: selectedUnitId, targetPosition: { row, col } });
+        clearUnitSelection();
+        return;
+      }
+    }
+
+    // Check if clicking a highlighted move tile
+    if (moveHighlights.some(t => t.row === row && t.col === col)) {
+      if (selectedUnitId !== null) {
+        void submitAction({ type: "move", unitId: selectedUnitId, targetPosition: { row, col } });
+        clearUnitSelection();
+        return;
+      }
+    }
+
+    // Click own unit: select it
+    if (clickedUnit && clickedUnit.playerId === humanPlayerId) {
+      if (selectedUnitId === clickedUnit.unitId) {
+        // Click same unit again: deselect
+        clearUnitSelection();
+        // Re-render without highlights
+        const playerIds = Object.keys(state.players);
+        const unitsArr = Object.values(state.units).map((u) => ({
+          metaId: u.metaId as string, playerId: u.playerId as string,
+          position: u.position, alive: u.alive,
+        }));
+        renderIso(newCanvas, {
+          gridSize,
+          baseTile: state.map.baseTile ?? "plain",
+          tiles: state.map.tiles as unknown as Record<string, { attribute: string }>,
+          units: unitsArr, playerIds,
+        });
+      } else {
+        void fetchAndShowUnitOptions(clickedUnit.unitId as string, { row, col }, state, gridSize);
+      }
+      return;
+    }
+
+    // Click enemy or empty tile with no selection: deselect
+    if (selectedUnitId !== null) {
+      clearUnitSelection();
+      // Re-render without highlights
+      const playerIds = Object.keys(state.players);
+      const unitsArr = Object.values(state.units).map((u) => ({
+        metaId: u.metaId as string, playerId: u.playerId as string,
+        position: u.position, alive: u.alive,
+      }));
+      renderIso(newCanvas, {
+        gridSize,
+        baseTile: state.map.baseTile ?? "plain",
+        tiles: state.map.tiles as unknown as Record<string, { attribute: string }>,
+        units: unitsArr, playerIds,
+      });
     }
   });
 }
@@ -970,6 +1248,7 @@ document.getElementById("ready-btn")?.addEventListener("click", () => {
 });
 
 document.getElementById("pass-btn")?.addEventListener("click", () => {
+  clearUnitSelection();
   void submitAction({ type: "pass" });
 });
 

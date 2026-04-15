@@ -296,6 +296,43 @@
     .game-over-banner h2 { color: var(--success); font-size: 1.5rem; }
     .game-over-banner p { color: var(--text2); margin-top: 0.4rem; }
 
+    /* ── Unit info panel ── */
+    #unit-info-panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px;
+      min-height: 120px;
+      font-size: 12px;
+    }
+    .unit-info-empty { color: var(--text2); font-style: italic; padding: 8px 0; }
+    .unit-info-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+    .unit-info-icon { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff; font-weight: bold; font-size: 13px; flex-shrink: 0; }
+    .unit-info-name { font-weight: bold; font-size: 14px; }
+    .unit-info-class { color: var(--text2); font-size: 11px; text-transform: capitalize; }
+    .unit-info-hp { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+    .unit-info-label { color: var(--text2); font-size: 11px; width: 24px; flex-shrink: 0; }
+    .unit-info-hp-bar { flex: 1; height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; }
+    .unit-info-hp-fill { height: 100%; border-radius: 4px; transition: width 0.3s; }
+    .unit-info-hp-text { font-size: 11px; color: var(--text2); white-space: nowrap; }
+    .unit-info-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 8px; margin-bottom: 6px; }
+    .stat-row { display: flex; align-items: center; gap: 4px; }
+    .stat-label { color: var(--text2); font-size: 11px; width: 28px; }
+    .stat-val { font-weight: bold; font-size: 12px; }
+    .unit-info-weapon { display: flex; gap: 4px; margin-bottom: 4px; }
+    .weapon-type, .weapon-attr { padding: 1px 5px; border-radius: 3px; font-size: 10px; background: var(--border); }
+    .weapon-type.weapon-melee { background: #b71c1c22; color: #f44336; border: 1px solid #f44336; }
+    .weapon-type.weapon-ranged { background: #0d47a122; color: #2196f3; border: 1px solid #2196f3; }
+    .weapon-type.weapon-artillery { background: #e65100aa; color: #ff9800; border: 1px solid #ff9800; }
+    .unit-info-effects { display: flex; flex-wrap: wrap; gap: 3px; margin-bottom: 4px; min-height: 18px; }
+    .effect-badge { padding: 1px 5px; border-radius: 3px; font-size: 10px; background: var(--border); }
+    .effect-fire { background: #b71c1c44; color: #f44336; }
+    .effect-ice { background: #01579b44; color: #29b6f6; }
+    .effect-none { color: var(--text2); font-size: 10px; font-style: italic; }
+    .unit-info-actions { font-size: 11px; }
+    .action-used { color: var(--text2); }
+    .action-avail { color: var(--success); }
+
     /* ── Util ── */
     .hidden { display: none !important; }
     .tag {
@@ -374,6 +411,12 @@
             <div class="turn-indicator" id="turn-indicator">—</div>
             <div style="font-size:0.8rem;color:var(--text2);margin-top:0.3rem;" id="round-indicator"></div>
             <button id="pass-btn" style="display:none;margin-top:0.8rem;width:100%;padding:0.5rem;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text2);cursor:pointer;font-size:0.85rem;" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">⏭ 패스 (턴 넘기기)</button>
+          </div>
+          <div class="panel-box">
+            <h3>유닛 정보</h3>
+            <div id="unit-info-panel">
+              <div class="unit-info-empty">유닛을 클릭하면 정보가 표시됩니다</div>
+            </div>
           </div>
           <div class="panel-box">
             <h3>플레이어</h3>
