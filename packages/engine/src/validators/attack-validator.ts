@@ -6,7 +6,6 @@ import type { GameState, UnitState, Position, ValidationResult, WeaponMeta, Meta
 import type { IDataRegistry } from "@ab/metadata";
 import { ErrorCode, VALID, invalid } from "@ab/metadata";
 import {
-  manhattanDistance,
   isFrozen,
   isInBounds,
   linePositions,
@@ -59,9 +58,9 @@ export class AttackValidator implements IAttackValidator {
     const unitMeta = this.registry.getUnit(unit.metaId);
     const weapon = this.registry.getWeapon(unitMeta.primaryWeaponId);
 
-    // 4. Range check (Manhattan)
-    const dist = manhattanDistance(unit.position, target);
-    if (dist < weapon.minRange || dist > weapon.maxRange) {
+    // 4. Range check — orthogonal straight lines only (no diagonal attacks)
+    const dist = orthogonalDist(unit.position, target);
+    if (dist === null || dist < weapon.minRange || dist > weapon.maxRange) {
       return { valid: false, errorCode: ErrorCode.ATTACK_OUT_OF_RANGE };
     }
 
@@ -83,11 +82,14 @@ export class AttackValidator implements IAttackValidator {
     const targets: Position[] = [];
     const gs = state.map.gridSize;
 
+    // Only orthogonal straight lines: same row or same column
+    const { row: ur, col: uc } = unit.position;
     for (let row = 0; row < gs; row++) {
       for (let col = 0; col < gs; col++) {
+        if (row !== ur && col !== uc) continue; // diagonal — skip
         const pos: Position = { row, col };
-        const dist = manhattanDistance(unit.position, pos);
-        if (dist < weapon.minRange || dist > weapon.maxRange) continue;
+        const dist = orthogonalDist(unit.position, pos);
+        if (dist === null || dist < weapon.minRange || dist > weapon.maxRange) continue;
         const check = this.checkAttackType(weapon, unit, pos, state);
         if (check.valid) targets.push(pos);
       }
@@ -222,6 +224,16 @@ export class AttackValidator implements IAttackValidator {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/**
+ * Returns the straight-line orthogonal distance between two positions
+ * (same row or same column only). Returns null if the positions are diagonal.
+ */
+function orthogonalDist(from: Position, to: Position): number | null {
+  if (from.row === to.row) return Math.abs(from.col - to.col);
+  if (from.col === to.col) return Math.abs(from.row - to.row);
+  return null; // diagonal — not a valid attack direction
+}
 
 function posEqual(a: Position, b: Position): boolean {
   return a.row === b.row && a.col === b.col;

@@ -1134,6 +1134,46 @@ function renderGame(state: GameStateSnapshot): void {
   renderPlayersList(state, playerIds, slot?.playerId);
 }
 
+// ─── Hover tooltip ────────────────────────────────────────────────────────────
+
+function showHoverTooltip(
+  x: number, y: number,
+  unit: GameStateSnapshot["units"][string],
+  isAttackable: boolean,
+  isMoveable: boolean,
+): void {
+  const tip = document.getElementById("hover-tooltip");
+  if (!tip) return;
+  const name = UNIT_NAME_KO[unit.metaId as string] ?? (unit.metaId as string);
+  const abbr = UNIT_ABBR[unit.metaId as string] ?? "?";
+  const hpPct = Math.max(0, Math.min(100, (unit.currentHealth / 1) * 100)); // approx
+  const hpColor = unit.currentHealth > 3 ? "#4caf50" : unit.currentHealth > 1 ? "#ff9800" : "#f44336";
+  const actionHint = isAttackable
+    ? `<div class="tip-attack">⚔️ 클릭하여 공격</div>`
+    : isMoveable
+    ? `<div class="tip-move">👟 클릭하여 이동</div>`
+    : "";
+  tip.innerHTML = `
+    <div class="tip-header">
+      <span class="tip-abbr">${abbr}</span>
+      <span class="tip-name">${name}</span>
+    </div>
+    <div class="tip-hp">
+      <span style="color:${hpColor}">HP ${unit.currentHealth}</span>
+      <span class="tip-armor">ARM ${unit.currentArmor}</span>
+    </div>
+    ${actionHint}
+  `;
+  tip.style.display = "block";
+  tip.style.left = `${x + 14}px`;
+  tip.style.top = `${y - 10}px`;
+}
+
+function hideHoverTooltip(): void {
+  const tip = document.getElementById("hover-tooltip");
+  if (tip) tip.style.display = "none";
+}
+
 function setupBoardClick(
   canvas: HTMLCanvasElement,
   state: GameStateSnapshot,
@@ -1144,6 +1184,43 @@ function setupBoardClick(
   canvas.parentNode?.replaceChild(newCanvas, canvas);
 
   newCanvas.style.cursor = isMyTurn ? "pointer" : "default";
+
+  // ── Hover: tooltip + cursor feedback ────────────────────────────────────────
+  newCanvas.addEventListener("mousemove", (e) => {
+    const rect = newCanvas.getBoundingClientRect();
+    const p = isoParams(gridSize);
+    const mx = (e.clientX - rect.left) * (newCanvas.width / rect.width);
+    const my = (e.clientY - rect.top) * (newCanvas.height / rect.height);
+    const { row, col } = screenToGrid(mx, my, p.cx, p.cy, p.HW, p.HH);
+
+    if (row < 0 || row >= gridSize || col < 0 || col >= gridSize) {
+      hideHoverTooltip();
+      newCanvas.style.cursor = isMyTurn ? "pointer" : "default";
+      return;
+    }
+
+    const hoveredUnit = Object.values(state.units).find(
+      (u) => u.alive && u.position.row === row && u.position.col === col,
+    );
+
+    const isAttackable = attackTargetHighlights.some(t => t.row === row && t.col === col);
+    const isMoveable = moveHighlights.some(t => t.row === row && t.col === col);
+
+    if (hoveredUnit) {
+      showHoverTooltip(e.clientX, e.clientY, hoveredUnit, isAttackable && isMyTurn, false);
+      newCanvas.style.cursor = isAttackable && isMyTurn ? "crosshair" : "pointer";
+    } else if (isMoveable && isMyTurn) {
+      hideHoverTooltip();
+      newCanvas.style.cursor = "pointer";
+    } else {
+      hideHoverTooltip();
+      newCanvas.style.cursor = isMyTurn ? "default" : "default";
+    }
+  });
+
+  newCanvas.addEventListener("mouseleave", () => {
+    hideHoverTooltip();
+  });
 
   newCanvas.addEventListener("click", (e) => {
     const rect = newCanvas.getBoundingClientRect();

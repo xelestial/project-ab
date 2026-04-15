@@ -380,6 +380,40 @@
       color: #fff;
     }
 
+    /* ── Hover Tooltip ── */
+    #hover-tooltip {
+      display: none;
+      position: fixed;
+      z-index: 9999;
+      pointer-events: none;
+      background: rgba(13,17,23,0.95);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 6px 10px;
+      font-size: 12px;
+      min-width: 110px;
+      max-width: 180px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+    }
+    .tip-header { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+    .tip-abbr {
+      width: 24px; height: 24px; border-radius: 50%;
+      background: var(--surface2); display: flex; align-items: center;
+      justify-content: center; font-weight: bold; font-size: 10px;
+      border: 1px solid var(--border); flex-shrink: 0;
+    }
+    .tip-name { font-weight: 600; font-size: 12px; }
+    .tip-hp { display: flex; gap: 8px; color: var(--text2); font-size: 11px; margin-bottom: 3px; }
+    .tip-armor { color: var(--text2); }
+    .tip-attack {
+      color: #f85149; font-size: 11px; font-weight: 600;
+      border-top: 1px solid var(--border); padding-top: 4px; margin-top: 3px;
+    }
+    .tip-move {
+      color: #58a6ff; font-size: 11px;
+      border-top: 1px solid var(--border); padding-top: 4px; margin-top: 3px;
+    }
+
     /* ── Util ── */
     .hidden { display: none !important; }
     .tag {
@@ -391,6 +425,9 @@
   </style>
 </head>
 <body>
+  <!-- Global hover tooltip -->
+  <div id="hover-tooltip"></div>
+
   <header>
     <h1>⚔ PROJECT AB</h1>
     <span class="subtitle">Turn-Based Strategy</span>
