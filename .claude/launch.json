@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "client",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["-F", "@ab/client", "dev", "--host"],
+      "port": 5173,
+      "autoPort": false
+    }
+  ]
+}

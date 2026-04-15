@@ -1,0 +1,48 @@
+[
+  {
+    "id": "skill_shield_defend",
+    "nameKey": "skill.shield_defend.name",
+    "descKey": "skill.shield_defend.desc",
+    "type": "passive",
+    "oneShot": false
+  },
+  {
+    "id": "skill_fighter_rush",
+    "nameKey": "skill.fighter_rush.name",
+    "descKey": "skill.fighter_rush.desc",
+    "type": "active",
+    "oneShot": true,
+    "weaponId": "wpn_fighter_rush"
+  },
+  {
+    "id": "skill_ranger_fire_arrow",
+    "nameKey": "skill.ranger_fire_arrow.name",
+    "descKey": "skill.ranger_fire_arrow.desc",
+    "type": "active",
+    "oneShot": true,
+    "weaponId": "wpn_ranger_fire_arrow"
+  },
+  {
+    "id": "skill_mage_freeze",
+    "nameKey": "skill.mage_freeze.name",
+    "descKey": "skill.mage_freeze.desc",
+    "type": "active",
+    "oneShot": true,
+    "weaponId": "wpn_mage_freeze"
+  },
+  {
+    "id": "skill_knight_taunt",
+    "nameKey": "skill.knight_taunt.name",
+    "descKey": "skill.knight_taunt.desc",
+    "type": "passive",
+    "oneShot": false
+  },
+  {
+    "id": "skill_support_acid",
+    "nameKey": "skill.support_acid.name",
+    "descKey": "skill.support_acid.desc",
+    "type": "active",
+    "oneShot": true,
+    "weaponId": "wpn_support_acid_bomb"
+  }
+]

@@ -1,0 +1,107 @@
+[
+  {
+    "id": "tile_road",
+    "tileType": "road",
+    "nameKey": "tile.road.name",
+    "descKey": "tile.road.desc",
+    "moveCost": 1,
+    "cannotStop": false,
+    "impassable": false,
+    "damagePerTurn": 0
+  },
+  {
+    "id": "tile_plain",
+    "tileType": "plain",
+    "nameKey": "tile.plain.name",
+    "descKey": "tile.plain.desc",
+    "moveCost": 1,
+    "cannotStop": false,
+    "impassable": false,
+    "damagePerTurn": 0
+  },
+  {
+    "id": "tile_mountain",
+    "tileType": "mountain",
+    "nameKey": "tile.mountain.name",
+    "descKey": "tile.mountain.desc",
+    "moveCost": 1,
+    "cannotStop": false,
+    "impassable": true,
+    "damagePerTurn": 0
+  },
+  {
+    "id": "tile_sand",
+    "tileType": "sand",
+    "nameKey": "tile.sand.name",
+    "descKey": "tile.sand.desc",
+    "moveCost": 2,
+    "cannotStop": false,
+    "impassable": false,
+    "damagePerTurn": 0,
+    "appliesEffectId": "effect_sand"
+  },
+  {
+    "id": "tile_river",
+    "tileType": "river",
+    "nameKey": "tile.river.name",
+    "descKey": "tile.river.desc",
+    "moveCost": 2,
+    "cannotStop": true,
+    "impassable": false,
+    "damagePerTurn": 0
+  },
+  {
+    "id": "tile_fire",
+    "tileType": "fire",
+    "nameKey": "tile.fire.name",
+    "descKey": "tile.fire.desc",
+    "moveCost": 1,
+    "cannotStop": false,
+    "impassable": false,
+    "damagePerTurn": 2,
+    "appliesEffectId": "effect_fire"
+  },
+  {
+    "id": "tile_water",
+    "tileType": "water",
+    "nameKey": "tile.water.name",
+    "descKey": "tile.water.desc",
+    "moveCost": 1,
+    "cannotStop": false,
+    "impassable": false,
+    "damagePerTurn": 0
+  },
+  {
+    "id": "tile_acid",
+    "tileType": "acid",
+    "nameKey": "tile.acid.name",
+    "descKey": "tile.acid.desc",
+    "moveCost": 1,
+    "cannotStop": false,
+    "impassable": false,
+    "damagePerTurn": 1,
+    "appliesEffectId": "effect_acid"
+  },
+  {
+    "id": "tile_electric",
+    "tileType": "electric",
+    "nameKey": "tile.electric.name",
+    "descKey": "tile.electric.desc",
+    "moveCost": 1,
+    "cannotStop": false,
+    "impassable": false,
+    "damagePerTurn": 1,
+    "appliesEffectId": "effect_electric"
+  },
+  {
+    "id": "tile_ice",
+    "tileType": "ice",
+    "nameKey": "tile.ice.name",
+    "descKey": "tile.ice.desc",
+    "moveCost": 1,
+    "cannotStop": false,
+    "impassable": false,
+    "damagePerTurn": 0,
+    "appliesEffectId": "effect_freeze"
+  }
+]

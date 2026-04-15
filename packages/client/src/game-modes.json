@@ -1,0 +1,47 @@
+{
+  "modes": [
+    {
+      "id": "standard",
+      "nameKo": "일반전 (1v1 · 3유닛)",
+      "nameEn": "Standard (1v1 · 3 units)",
+      "mapId": "map_test_01",
+      "playerCount": 2,
+      "maxUnitsPerPlayer": 3,
+      "teamSize": 1,
+      "seats": [
+        { "index": 0, "label": "Player 1", "defaultType": "human" },
+        { "index": 1, "label": "Player 2", "defaultType": "ai" }
+      ]
+    },
+    {
+      "id": "blitz_1v1",
+      "nameKo": "격전 (1v1 · 6유닛)",
+      "nameEn": "Blitz (1v1 · 6 units)",
+      "mapId": "map_1v1_6v6",
+      "playerCount": 2,
+      "maxUnitsPerPlayer": 6,
+      "teamSize": 1,
+      "seats": [
+        { "index": 0, "label": "Player 1", "defaultType": "human" },
+        { "index": 1, "label": "Player 2", "defaultType": "ai" }
+      ]
+    },
+    {
+      "id": "team_2v2",
+      "nameKo": "팀전 (2v2 · 6유닛)",
+      "nameEn": "Team Battle (2v2 · 6 units)",
+      "mapId": "map_2v2_6v6",
+      "playerCount": 4,
+      "maxUnitsPerPlayer": 3,
+      "teamSize": 2,
+      "seats": [
+        { "index": 0, "label": "Team A · P1", "defaultType": "human" },
+        { "index": 1, "label": "Team A · P2", "defaultType": "ai" },
+        { "index": 2, "label": "Team B · P1", "defaultType": "ai" },
+        { "index": 3, "label": "Team B · P2", "defaultType": "ai" }
+      ]
+    }
+  ],
+  "serverUrl": "http://localhost:3000",
+  "wsUrl": "ws://localhost:3000"
+}

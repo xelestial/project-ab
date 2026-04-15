@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Project AB — Turn-Based Strategy</title>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --surface2: #21262d;
+      --border: #30363d;
+      --accent: #58a6ff;
+      --accent2: #f78166;
+      --text: #e6edf3;
+      --text2: #8b949e;
+      --team-a: #388bfd;
+      --team-b: #f85149;
+      --success: #3fb950;
+      --warn: #d29922;
+      --font: "Segoe UI", system-ui, sans-serif;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Header ── */
+    header {
+      padding: 0.8rem 2rem;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+    header h1 { font-size: 1.2rem; letter-spacing: 0.1em; color: var(--accent); }
+    header .subtitle { color: var(--text2); font-size: 0.85rem; }
+
+    /* ── Main area ── */
+    main { flex: 1; padding: 1.5rem 2rem; max-width: 1400px; margin: 0 auto; width: 100%; }
+
+    /* ── Screens ── */
+    .screen { display: none; }
+    .screen.active { display: block; }
+
+    /* ── Main menu ── */
+    .menu-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 1.5rem;
+      margin-top: 2rem;
+    }
+    .mode-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.5rem;
+      cursor: pointer;
+      transition: border-color 0.15s, transform 0.1s;
+    }
+    .mode-card:hover {
+      border-color: var(--accent);
+      transform: translateY(-2px);
+    }
+    .mode-card h2 { font-size: 1.1rem; margin-bottom: 0.4rem; }
+    .mode-card .meta { color: var(--text2); font-size: 0.8rem; margin-bottom: 1rem; }
+    .mode-card .badge {
+      display: inline-block;
+      padding: 0.2rem 0.6rem;
+      border-radius: 20px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      background: var(--surface2);
+      margin-right: 0.4rem;
+    }
+
+    /* ── Lobby ── */
+    .lobby-header {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+    .lobby-header h2 { font-size: 1.3rem; }
+    .back-btn {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--text2);
+      border-radius: 8px;
+      padding: 0.4rem 0.8rem;
+      cursor: pointer;
+      font-size: 0.85rem;
+    }
+    .back-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+    .seats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+    .seat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1rem;
+    }
+    .seat-card.team-a { border-left: 3px solid var(--team-a); }
+    .seat-card.team-b { border-left: 3px solid var(--team-b); }
+    .seat-label { font-size: 0.75rem; color: var(--text2); margin-bottom: 0.6rem; text-transform: uppercase; letter-spacing: 0.05em; }
+    .seat-type-toggle { display: flex; gap: 0.5rem; }
+    .type-btn {
+      flex: 1;
+      padding: 0.4rem;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--surface2);
+      color: var(--text2);
+      cursor: pointer;
+      font-size: 0.8rem;
+      transition: all 0.15s;
+    }
+    .type-btn.active.human { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .type-btn.active.ai { background: var(--success); color: #fff; border-color: var(--success); }
+    .type-btn:not(.active):hover { border-color: var(--text); color: var(--text); }
+
+    .lobby-actions { display: flex; gap: 1rem; }
+    .start-btn {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 0.7rem 2rem;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+    .start-btn:hover { opacity: 0.85; }
+    .start-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .status-msg {
+      margin-top: 1rem;
+      color: var(--text2);
+      font-size: 0.9rem;
+      min-height: 1.4em;
+    }
+    .status-msg.ok { color: var(--success); }
+    .status-msg.err { color: var(--accent2); }
+
+    /* ── Placement screen ── */
+    .placement-layout {
+      display: grid;
+      grid-template-columns: 1fr 280px;
+      gap: 1.5rem;
+    }
+    .placement-canvas-wrap {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: auto;
+      padding: 0.5rem;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+    }
+    #placement-canvas { cursor: crosshair; display: block; }
+    .placement-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+    .placement-info {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1rem;
+    }
+    .placement-info h3 { font-size: 0.85rem; color: var(--text2); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.6rem; }
+    .placement-info p { font-size: 0.85rem; color: var(--text); }
+    .placement-counter { font-size: 1.2rem; font-weight: 700; color: var(--accent); }
+
+    .unit-cards {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1rem;
+    }
+    .unit-cards h3 { font-size: 0.85rem; color: var(--text2); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.8rem; }
+    .unit-card {
+      display: flex;
+      align-items: center;
+      gap: 0.8rem;
+      padding: 0.6rem 0.8rem;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      cursor: pointer;
+      margin-bottom: 0.5rem;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .unit-card:hover { border-color: var(--accent); }
+    .unit-card.selected { border-color: var(--accent); background: rgba(88,166,255,0.1); }
+    .unit-card.used { opacity: 0.35; cursor: not-allowed; pointer-events: none; }
+    .unit-abbr {
+      width: 32px; height: 32px;
+      border-radius: 50%;
+      background: var(--surface2);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.7rem; font-weight: 700; color: var(--text);
+      border: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .unit-info { flex: 1; }
+    .unit-name { font-size: 0.85rem; font-weight: 600; }
+    .unit-stats { font-size: 0.75rem; color: var(--text2); }
+
+    .ready-btn {
+      width: 100%;
+      background: var(--success);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 0.8rem;
+      font-size: 1rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+    .ready-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+    .ready-btn:not(:disabled):hover { opacity: 0.85; }
+
+    /* ── Game view ── */
+    .game-layout {
+      display: grid;
+      grid-template-columns: 1fr 260px;
+      gap: 1.5rem;
+    }
+    .board-wrap {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: auto;
+      padding: 0.5rem;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+    }
+    #board-canvas { display: block; }
+
+    .side-panel { display: flex; flex-direction: column; gap: 1rem; }
+    .panel-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1rem;
+    }
+    .panel-box h3 { font-size: 0.85rem; color: var(--text2); margin-bottom: 0.6rem; text-transform: uppercase; letter-spacing: 0.05em; }
+
+    .turn-indicator { font-size: 1rem; font-weight: 600; color: var(--accent); }
+
+    .players-list { display: flex; flex-direction: column; gap: 0.5rem; }
+    .player-row {
+      display: flex; align-items: center; gap: 0.5rem;
+      padding: 0.3rem; border-radius: 6px; font-size: 0.85rem;
+    }
+    .player-row.active { background: var(--surface2); }
+    .player-dot {
+      width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
+    }
+    .player-dot.p0 { background: var(--team-a); }
+    .player-dot.p1 { background: var(--team-b); }
+    .player-dot.p2 { background: #a371f7; }
+    .player-dot.p3 { background: #e3b341; }
+
+    .log-list {
+      max-height: 200px; overflow-y: auto;
+      display: flex; flex-direction: column; gap: 0.3rem;
+    }
+    .log-entry { font-size: 0.78rem; color: var(--text2); border-bottom: 1px solid var(--border); padding-bottom: 0.2rem; }
+
+    .game-over-banner {
+      background: var(--surface2);
+      border: 2px solid var(--success);
+      border-radius: 12px;
+      padding: 1.5rem;
+      text-align: center;
+      margin-bottom: 1rem;
+    }
+    .game-over-banner h2 { color: var(--success); font-size: 1.5rem; }
+    .game-over-banner p { color: var(--text2); margin-top: 0.4rem; }
+
+    /* ── Util ── */
+    .hidden { display: none !important; }
+    .tag {
+      display: inline-block;
+      padding: 0.15rem 0.5rem; border-radius: 4px;
+      font-size: 0.7rem; background: var(--surface2);
+      color: var(--text2); border: 1px solid var(--border);
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>⚔ PROJECT AB</h1>
+    <span class="subtitle">Turn-Based Strategy</span>
+  </header>
+  <main>
+    <!-- Main Menu -->
+    <div id="screen-menu" class="screen active">
+      <h2 style="color:var(--text2);font-size:0.9rem;text-transform:uppercase;letter-spacing:0.1em;">게임 모드 선택</h2>
+      <div class="menu-grid" id="menu-grid"></div>
+    </div>
+
+    <!-- Lobby -->
+    <div id="screen-lobby" class="screen">
+      <div class="lobby-header">
+        <button class="back-btn" id="lobby-back">← 뒤로</button>
+        <h2 id="lobby-title">게임 로비</h2>
+      </div>
+      <div class="seats-grid" id="seats-grid"></div>
+      <div class="lobby-actions">
+        <button class="start-btn" id="start-btn">게임 시작</button>
+      </div>
+      <div class="status-msg" id="lobby-status"></div>
+    </div>
+
+    <!-- Placement Screen -->
+    <div id="screen-placement" class="screen">
+      <div class="lobby-header">
+        <h2 id="placement-title">유닛 배치</h2>
+      </div>
+      <div class="placement-layout">
+        <div class="placement-canvas-wrap">
+          <canvas id="placement-canvas"></canvas>
+        </div>
+        <div class="placement-panel">
+          <div class="placement-info">
+            <h3>배치 안내</h3>
+            <p>내 진영 <strong>(밝게 표시)</strong>에 유닛을 배치하세요.</p>
+            <p style="margin-top:0.5rem">배치 완료: <span class="placement-counter" id="placement-counter">0</span> / <span id="placement-max">3</span></p>
+          </div>
+          <div class="unit-cards" id="unit-card-list">
+            <h3>유닛 선택</h3>
+          </div>
+          <button class="ready-btn" id="ready-btn" disabled>준비 완료</button>
+          <div class="status-msg" id="placement-status"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Game View -->
+    <div id="screen-game" class="screen">
+      <div class="game-layout">
+        <div class="board-wrap">
+          <canvas id="board-canvas"></canvas>
+        </div>
+        <div class="side-panel">
+          <div id="game-over-container" class="hidden">
+            <div class="game-over-banner">
+              <h2>🏆 게임 종료</h2>
+              <p id="game-over-msg"></p>
+              <button class="start-btn" id="back-to-menu-btn" style="margin-top:1rem;">메인 메뉴로</button>
+            </div>
+          </div>
+          <div class="panel-box">
+            <h3>현재 턴</h3>
+            <div class="turn-indicator" id="turn-indicator">—</div>
+            <div style="font-size:0.8rem;color:var(--text2);margin-top:0.3rem;" id="round-indicator"></div>
+          </div>
+          <div class="panel-box">
+            <h3>플레이어</h3>
+            <div class="players-list" id="players-list"></div>
+          </div>
+          <div class="panel-box">
+            <h3>로그</h3>
+            <div class="log-list" id="log-list"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

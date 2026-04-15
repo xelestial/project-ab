@@ -1,0 +1,78 @@
+[
+  {
+    "id": "effect_freeze",
+    "nameKey": "effect.freeze.name",
+    "descKey": "effect.freeze.desc",
+    "effectType": "freeze",
+    "damagePerTurn": 0,
+    "blocksAllActions": true,
+    "alsoAffectsTile": false,
+    "removeConditions": [
+      { "type": "turns", "count": 1 },
+      { "type": "collision_with_frozen" }
+    ]
+  },
+  {
+    "id": "effect_fire",
+    "nameKey": "effect.fire.name",
+    "descKey": "effect.fire.desc",
+    "effectType": "fire",
+    "damagePerTurn": 1,
+    "blocksAllActions": false,
+    "alsoAffectsTile": false,
+    "removeConditions": [
+      { "type": "turns", "count": 3 },
+      { "type": "manual_extinguish" },
+      { "type": "river_entry" }
+    ]
+  },
+  {
+    "id": "effect_acid",
+    "nameKey": "effect.acid.name",
+    "descKey": "effect.acid.desc",
+    "effectType": "acid",
+    "damagePerTurn": 1,
+    "blocksAllActions": false,
+    "alsoAffectsTile": true,
+    "removeConditions": [
+      { "type": "turns", "count": 3 },
+      { "type": "river_entry" }
+    ]
+  },
+  {
+    "id": "effect_water",
+    "nameKey": "effect.water.name",
+    "descKey": "effect.water.desc",
+    "effectType": "water",
+    "damagePerTurn": 0,
+    "blocksAllActions": false,
+    "alsoAffectsTile": false,
+    "removeConditions": [
+      { "type": "on_move" }
+    ]
+  },
+  {
+    "id": "effect_sand",
+    "nameKey": "effect.sand.name",
+    "descKey": "effect.sand.desc",
+    "effectType": "sand",
+    "damagePerTurn": 0,
+    "blocksAllActions": false,
+    "alsoAffectsTile": false,
+    "removeConditions": [
+      { "type": "on_move" }
+    ]
+  },
+  {
+    "id": "effect_electric",
+    "nameKey": "effect.electric.name",
+    "descKey": "effect.electric.desc",
+    "effectType": "electric",
+    "damagePerTurn": 1,
+    "blocksAllActions": false,
+    "alsoAffectsTile": false,
+    "removeConditions": [
+      { "type": "turns", "count": 1 }
+    ]
+  }
+]

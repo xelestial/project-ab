@@ -1,0 +1,36 @@
+{
+  "id": "map_test_01",
+  "nameKey": "map.test_01.name",
+  "descKey": "map.test_01.desc",
+  "playerCounts": [2],
+  "tileOverrides": [
+    { "position": { "row": 5, "col": 3 }, "tileType": "mountain" },
+    { "position": { "row": 5, "col": 4 }, "tileType": "mountain" },
+    { "position": { "row": 5, "col": 5 }, "tileType": "mountain" },
+    { "position": { "row": 3, "col": 5 }, "tileType": "river" },
+    { "position": { "row": 4, "col": 5 }, "tileType": "river" },
+    { "position": { "row": 5, "col": 5 }, "tileType": "river" },
+    { "position": { "row": 2, "col": 2 }, "tileType": "sand" },
+    { "position": { "row": 2, "col": 3 }, "tileType": "sand" },
+    { "position": { "row": 8, "col": 7 }, "tileType": "sand" },
+    { "position": { "row": 8, "col": 8 }, "tileType": "sand" }
+  ],
+  "spawnPoints": [
+    {
+      "playerId": 0,
+      "positions": [
+        { "row": 1, "col": 1 },
+        { "row": 1, "col": 2 },
+        { "row": 2, "col": 1 }
+      ]
+    },
+    {
+      "playerId": 1,
+      "positions": [
+        { "row": 9, "col": 9 },
+        { "row": 9, "col": 8 },
+        { "row": 8, "col": 9 }
+      ]
+    }
+  ]
+}

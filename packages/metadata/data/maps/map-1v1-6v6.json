@@ -1,0 +1,53 @@
+{
+  "id": "map_1v1_6v6",
+  "nameKey": "map.1v1_6v6.name",
+  "descKey": "map.1v1_6v6.desc",
+  "playerCounts": [2],
+  "gridSize": 16,
+  "maxUnitsPerPlayer": 6,
+  "teamSize": 1,
+  "tileOverrides": [
+    { "position": { "row": 7, "col": 5 }, "tileType": "mountain" },
+    { "position": { "row": 7, "col": 6 }, "tileType": "mountain" },
+    { "position": { "row": 7, "col": 7 }, "tileType": "mountain" },
+    { "position": { "row": 7, "col": 8 }, "tileType": "mountain" },
+    { "position": { "row": 7, "col": 9 }, "tileType": "mountain" },
+    { "position": { "row": 8, "col": 7 }, "tileType": "mountain" },
+    { "position": { "row": 6, "col": 7 }, "tileType": "mountain" },
+    { "position": { "row": 3, "col": 7 }, "tileType": "river" },
+    { "position": { "row": 4, "col": 7 }, "tileType": "river" },
+    { "position": { "row": 5, "col": 7 }, "tileType": "river" },
+    { "position": { "row": 6, "col": 6 }, "tileType": "river" },
+    { "position": { "row": 9, "col": 7 }, "tileType": "river" },
+    { "position": { "row": 10, "col": 7 }, "tileType": "river" },
+    { "position": { "row": 11, "col": 7 }, "tileType": "river" },
+    { "position": { "row": 2, "col": 10 }, "tileType": "sand" },
+    { "position": { "row": 2, "col": 11 }, "tileType": "sand" },
+    { "position": { "row": 12, "col": 4 }, "tileType": "sand" },
+    { "position": { "row": 12, "col": 5 }, "tileType": "sand" }
+  ],
+  "spawnPoints": [
+    {
+      "playerId": 0,
+      "positions": [
+        { "row": 1, "col": 1 },
+        { "row": 1, "col": 2 },
+        { "row": 1, "col": 3 },
+        { "row": 2, "col": 1 },
+        { "row": 2, "col": 2 },
+        { "row": 2, "col": 3 }
+      ]
+    },
+    {
+      "playerId": 1,
+      "positions": [
+        { "row": 14, "col": 14 },
+        { "row": 14, "col": 13 },
+        { "row": 14, "col": 12 },
+        { "row": 13, "col": 14 },
+        { "row": 13, "col": 13 },
+        { "row": 13, "col": 12 }
+      ]
+    }
+  ]
+}

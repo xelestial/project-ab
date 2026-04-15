@@ -1,0 +1,4 @@
+name, class, faction, movement, health, armor, attributes, skills(weapon skill)
+t1, tanker, a, 3, 6, 1,1, shield: defend pierce, absorb tiles effect and use it when attacks
+f1, fighter, a, 3, 4,1,0, rush: can move to attack enemy or friendly unit in same line, knock back
+r1, ranger, a, 2, 4, 2,0, none, fire arrow: attack with fire
