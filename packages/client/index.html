@@ -333,6 +333,53 @@
     .action-used { color: var(--text2); }
     .action-avail { color: var(--success); }
 
+    /* ── Turn order bar (DOS2-style) ── */
+    .turn-order-bar {
+      display: flex;
+      gap: 4px;
+      padding: 6px 8px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      overflow-x: auto;
+      min-height: 44px;
+      align-items: center;
+    }
+    .turn-slot {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      border: 2px solid var(--border);
+      cursor: default;
+      flex-shrink: 0;
+      transition: all 0.15s;
+      position: relative;
+    }
+    .turn-slot-active {
+      width: 42px;
+      height: 42px;
+      box-shadow: 0 0 10px currentColor;
+    }
+    .turn-slot-past {
+      opacity: 0.35;
+    }
+    .turn-slot-dead {
+      opacity: 0.2;
+    }
+    .turn-slot-abbr {
+      font-size: 11px;
+      font-weight: bold;
+    }
+    .turn-slot-arrow {
+      position: absolute;
+      bottom: -14px;
+      font-size: 9px;
+      color: #fff;
+    }
+
     /* ── Util ── */
     .hidden { display: none !important; }
     .tag {
@@ -394,6 +441,7 @@
 
     <!-- Game View -->
     <div id="screen-game" class="screen">
+      <div id="turn-order-bar" class="turn-order-bar"></div>
       <div class="game-layout">
         <div class="board-wrap">
           <canvas id="board-canvas"></canvas>

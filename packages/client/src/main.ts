@@ -1025,6 +1025,41 @@ async function submitAction(action: {
   } catch { /* ignore */ }
 }
 
+// ─── Turn order bar (DOS2-style) ──────────────────────────────────────────────
+
+function renderTurnOrder(state: GameStateSnapshot, playerIds: string[]): void {
+  const bar = document.getElementById("turn-order-bar");
+  if (!bar) return;
+  bar.innerHTML = "";
+
+  const turnOrder = state.turnOrder;
+  const currentIdx = state.currentTurnIndex;
+
+  turnOrder.forEach((slot, idx) => {
+    const unit = slot.unitId ? state.units[slot.unitId] : undefined;
+    const pIdx = playerIds.indexOf(slot.playerId);
+    const color = PLAYER_COLORS[pIdx >= 0 ? pIdx : 0]!;
+    const abbr = unit ? (UNIT_ABBR[unit.metaId as string] ?? "?") : slot.playerId.slice(0, 2).toUpperCase();
+    const isDead = unit ? !unit.alive : false;
+    const isCurrent = idx === currentIdx;
+    const isPast = idx < currentIdx;
+
+    const item = document.createElement("div");
+    item.className = `turn-slot ${isCurrent ? "turn-slot-active" : ""} ${isPast ? "turn-slot-past" : ""} ${isDead ? "turn-slot-dead" : ""}`;
+    item.style.borderColor = color;
+    item.style.backgroundColor = isCurrent ? color : "transparent";
+    item.innerHTML = `
+      <div class="turn-slot-abbr" style="color:${isCurrent ? "#fff" : color}">${abbr}</div>
+      ${isCurrent ? '<div class="turn-slot-arrow">&#9660;</div>' : ""}
+    `;
+
+    // Tooltip
+    item.title = `${slot.playerId.slice(0, 12)}${unit ? ` — ${UNIT_NAME_KO[unit.metaId as string] ?? unit.metaId}` : ""}`;
+
+    bar.appendChild(item);
+  });
+}
+
 // ─── Game rendering ───────────────────────────────────────────────────────────
 
 function renderGame(state: GameStateSnapshot): void {
@@ -1067,6 +1102,17 @@ function renderGame(state: GameStateSnapshot): void {
   const passBtn = document.getElementById("pass-btn") as HTMLButtonElement | null;
   if (passBtn) passBtn.style.display = isMyTurn ? "block" : "none";
 
+  // Auto-select and fetch options for current unit when it's my turn
+  if (isMyTurn && slot?.unitId) {
+    const currentUnit = state.units[slot.unitId];
+    if (currentUnit && currentUnit.alive) {
+      const newSelectedId = slot.unitId;
+      if (selectedUnitId !== newSelectedId) {
+        void fetchAndShowUnitOptions(newSelectedId, currentUnit.position, state, gridSize);
+      }
+    }
+  }
+
   // Set up board interaction
   setupBoardClick(canvas, state, isMyTurn, gridSize);
 
@@ -1084,6 +1130,7 @@ function renderGame(state: GameStateSnapshot): void {
     selectedPos: selectedGameUnitPos,
   });
 
+  renderTurnOrder(state, playerIds);
   renderPlayersList(state, playerIds, slot?.playerId);
 }
 
@@ -1145,8 +1192,14 @@ function setupBoardClick(
       }
     }
 
-    // Click own unit: select it
+    // Click own unit: select it (only current turn's unit can act)
     if (clickedUnit && clickedUnit.playerId === humanPlayerId) {
+      const currentSlot = state.turnOrder[state.currentTurnIndex];
+      if (currentSlot?.unitId && clickedUnit.unitId !== currentSlot.unitId) {
+        // Clicked a different own unit — show info only, no action
+        void fetchAndShowUnitOptions(clickedUnit.unitId as string, { row, col }, state, gridSize);
+        return;
+      }
       if (selectedUnitId === clickedUnit.unitId) {
         // Click same unit again: deselect
         clearUnitSelection();

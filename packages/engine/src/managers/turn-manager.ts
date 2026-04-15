@@ -30,6 +30,10 @@ export class TurnManager implements ITurnManager {
     if (currentPlayer === undefined) return false;
     if (unit.playerId !== currentPlayer.playerId) return false;
 
+    // If this slot has a specific unitId, enforce it
+    const slot = state.turnOrder[state.currentTurnIndex];
+    if (slot?.unitId !== undefined && unit.unitId !== slot.unitId) return false;
+
     // Frozen: no actions
     if (isFrozen(unit)) return false;
 

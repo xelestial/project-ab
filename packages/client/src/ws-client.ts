@@ -7,7 +7,7 @@ export interface GameStateSnapshot {
   phase: string;
   round: number;
   currentTurnIndex: number;
-  turnOrder: Array<{ playerId: string; priority: number }>;
+  turnOrder: Array<{ playerId: string; unitId?: string; priority: number }>;
   players: Record<string, {
     playerId: string;
     teamIndex: number;

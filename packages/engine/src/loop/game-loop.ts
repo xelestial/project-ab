@@ -92,6 +92,15 @@ export class GameLoop implements IGameLoop {
 
         const playerId = slot.playerId;
 
+        // Skip dead unit slots silently
+        if (slot.unitId !== undefined) {
+          const slotUnit = state.units[slot.unitId];
+          if (slotUnit === undefined || !slotUnit.alive) {
+            state = this.turnManager.endTurn(state);
+            continue;
+          }
+        }
+
         // Effect tick for all units of current player
         for (const unitId of Object.values(state.units)
           .filter((u) => u.alive && u.playerId === playerId)

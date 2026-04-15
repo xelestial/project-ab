@@ -264,8 +264,8 @@ export class DraftManager implements IDraftManager {
    * Rules:
    * - Sort by priority ascending (lower = acts first)
    * - Same priority: round 1 = random, subsequent = alternate (loser of last coin flip goes first)
-   * - For 2-player: A1,B1,A2,B2,A3,B3 structure within the round
-   * - For 2v2: team priority sum determines team order; within each team, players alternate
+   * - For 1v1: unit-level interleaved slots (P1U0, P2U0, P1U1, P2U1, ...)
+   * - For 2v2: team priority sum determines team order; within each team, players alternate (player-level)
    */
   buildTurnOrder(
     state: GameState,
@@ -274,13 +274,13 @@ export class DraftManager implements IDraftManager {
   ): TurnSlot[] {
     const players = Object.values(state.players).filter((p) => !p.surrendered);
 
-    // 2v2 mode: group by teamIndex
+    // 2v2 mode: group by teamIndex — keep player-level slots
     const teamCount = new Set(players.map((p) => p.teamIndex)).size;
     if (teamCount > 1 && players.length > 2) {
       return this.buildTwoVsTwoTurnOrder(players, round, lastFirstPlayerId);
     }
 
-    // Standard 1v1 / single-team
+    // Standard 1v1: determine player order
     players.sort((a, b) => a.priority - b.priority);
 
     // Same priority resolution
@@ -300,10 +300,34 @@ export class DraftManager implements IDraftManager {
       }
     }
 
-    return players.map((p) => ({
-      playerId: p.playerId,
-      priority: p.priority,
-    }));
+    // Get alive units per player, shuffled randomly
+    const unitsByPlayer = new Map<string, string[]>();
+    for (const player of players) {
+      const alive = (player.unitIds as string[]).filter((uid) => state.units[uid]?.alive);
+      // Shuffle the unit order randomly each round
+      for (let i = alive.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [alive[i], alive[j]] = [alive[j]!, alive[i]!];
+      }
+      unitsByPlayer.set(player.playerId, alive);
+    }
+
+    // Interleave: P1U0, P2U0, P1U1, P2U1, P1U2, P2U2, ...
+    const maxUnits = Math.max(...[...unitsByPlayer.values()].map((u) => u.length), 0);
+    const slots: TurnSlot[] = [];
+    for (let i = 0; i < maxUnits; i++) {
+      for (const player of players) {
+        const units = unitsByPlayer.get(player.playerId) ?? [];
+        if (i < units.length) {
+          slots.push({
+            playerId: player.playerId,
+            unitId: units[i] as import("@ab/metadata").UnitId,
+            priority: player.priority,
+          });
+        }
+      }
+    }
+    return slots;
   }
 
   /**

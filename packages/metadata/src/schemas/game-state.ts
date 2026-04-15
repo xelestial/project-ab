@@ -104,6 +104,7 @@ export type DraftState = z.infer<typeof DraftStateSchema>;
 
 export const TurnSlotSchema = z.object({
   playerId: PlayerIdSchema,
+  unitId: UnitIdSchema.optional(),
   priority: z.number().int().min(1),
 });
 export type TurnSlot = z.infer<typeof TurnSlotSchema>;
