@@ -2,8 +2,8 @@
  * tryStartGame — shared logic called from both REST routes and WS handler.
  * Fires when all players have submitted their pre-game placement.
  */
-import type { GameFactory } from "@ab/engine";
-import type { IDataRegistry, PlayerId } from "@ab/metadata";
+import type { GameFactory, IEventBus } from "@ab/engine";
+import type { IDataRegistry, PlayerId, GameState } from "@ab/metadata";
 import type { PlayerConfig } from "@ab/engine";
 import type { FastifyBaseLogger } from "fastify";
 import type { GameSession } from "./game-session-manager.js";
@@ -51,6 +51,13 @@ export function tryStartGame(
   // Build a pre-placed battle state and replace session state
   const battleState = factory.createBattleState(gameOptions, placementsMap);
   session.state = battleState;
+
+  // Keep session.state in sync with the live game state for REST polling
+  (session.context.eventBus as IEventBus).onAny((event) => {
+    if ("state" in event) {
+      session.state = (event as { state: GameState }).state;
+    }
+  });
 
   // Start game loop
   session.context.gameLoop

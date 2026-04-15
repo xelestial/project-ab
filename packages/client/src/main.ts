@@ -822,14 +822,6 @@ function renderGame(state: GameStateSnapshot): void {
     alive: u.alive,
   }));
 
-  renderIso(canvas, {
-    gridSize,
-    baseTile: state.map.baseTile ?? "plain",
-    tiles: state.map.tiles as unknown as Record<string, { attribute: string }>,
-    units: unitsArr,
-    playerIds,
-  });
-
   // Check if it's human's turn
   const slot = state.turnOrder[state.currentTurnIndex];
   const isMyTurn = slot?.playerId === humanPlayerId;
@@ -854,8 +846,18 @@ function renderGame(state: GameStateSnapshot): void {
   const passBtn = document.getElementById("pass-btn") as HTMLButtonElement | null;
   if (passBtn) passBtn.style.display = isMyTurn ? "block" : "none";
 
-  // Board click for human actions
+  // Set up board interaction (clones canvas to remove old listeners)
   setupBoardClick(canvas, state, isMyTurn, gridSize);
+
+  // Render on the active canvas (may have been replaced by setupBoardClick)
+  const activeCanvas = (document.getElementById("board-canvas") as HTMLCanvasElement) ?? canvas;
+  renderIso(activeCanvas, {
+    gridSize,
+    baseTile: state.map.baseTile ?? "plain",
+    tiles: state.map.tiles as unknown as Record<string, { attribute: string }>,
+    units: unitsArr,
+    playerIds,
+  });
 
   renderPlayersList(state, playerIds, slot?.playerId);
 }

@@ -106,7 +106,6 @@ export class GameLoop implements IGameLoop {
           turnIndex: state.currentTurnIndex,
           state,
         });
-
         // Request action from player
         const adapter = adapters.get(playerId);
         if (adapter !== undefined) {
