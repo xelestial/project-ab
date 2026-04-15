@@ -548,6 +548,90 @@ export async function registerRoutes(
     },
   );
 
+  // ── Human turn action (protected) ────────────────────────────────────────
+
+  const ActionBodySchema = z.object({
+    playerId: z.string().min(1),
+    action: z.object({
+      type: z.enum(["move", "attack", "pass"]),
+      unitId: z.string().optional(),
+      targetPosition: z.object({ row: z.number().int(), col: z.number().int() }).optional(),
+      targetUnitId: z.string().optional(),
+    }),
+  });
+
+  /**
+   * POST /api/v1/rooms/:gameId/action — submit a human player action during their turn.
+   * The PassThroughAdapter receives the action and resolves the pending requestAction promise.
+   */
+  fastify.post<{ Params: { gameId: string } }>(
+    "/api/v1/rooms/:gameId/action",
+    { preHandler: requireAuth },
+    async (req, reply) => {
+      const session = sessionManager.getSession(req.params["gameId"]);
+      if (session === undefined) {
+        return reply.code(404).send({ error: "Game not found" });
+      }
+
+      const body = ActionBodySchema.safeParse(req.body);
+      if (!body.success) {
+        return reply.code(400).send({ error: "Invalid request", details: body.error.flatten() });
+      }
+
+      const { playerId, action } = body.data;
+      const adapter = session.adapters.get(playerId);
+
+      if (adapter === undefined) {
+        return reply.code(404).send({ error: "Player adapter not found" });
+      }
+
+      if (adapter.type !== "human") {
+        return reply.code(409).send({ error: "Player is not human-controlled" });
+      }
+
+      // Build a proper PlayerAction
+      const firstUnit = Object.values(session.state.units).find(
+        (u) => u.alive && u.playerId === playerId,
+      );
+      const unitId = (action.unitId ?? firstUnit?.unitId ?? "") as import("@ab/metadata").UnitId;
+
+      let playerAction: import("@ab/metadata").PlayerAction;
+
+      if (action.type === "pass") {
+        playerAction = {
+          type: "pass",
+          playerId: playerId as PlayerId,
+          unitId,
+        };
+      } else if (action.type === "move" && action.targetPosition !== undefined) {
+        playerAction = {
+          type: "move",
+          playerId: playerId as PlayerId,
+          unitId,
+          destination: action.targetPosition as import("@ab/metadata").Position,
+        };
+      } else if (action.type === "attack" && action.targetPosition !== undefined) {
+        playerAction = {
+          type: "attack",
+          playerId: playerId as PlayerId,
+          unitId,
+          target: action.targetPosition as import("@ab/metadata").Position,
+        };
+      } else {
+        return reply.code(400).send({ error: "Invalid action parameters" });
+      }
+
+      // Submit to PassThroughAdapter (or HumanAdapter via queue)
+      import("../ws/passthrough-adapter.js").then(({ PassThroughAdapter }) => {
+        if (adapter instanceof PassThroughAdapter) {
+          adapter.submitAction(playerAction);
+        }
+      }).catch(() => {});
+
+      return reply.code(200).send({ accepted: true });
+    },
+  );
+
   // ── Matchmaking (protected) ───────────────────────────────────────────────
 
   /**

@@ -458,7 +458,7 @@ async function startGame(): Promise<void> {
     // Add AI players (after human is registered to preserve slot order)
     for (const seat of aiSeats) {
       setStatus(`AI 추가 중 (시트 ${seat.index + 1})...`);
-      const aiRes = await api.addAi(room.gameId, { iterations: 300, timeoutMs: 2000 });
+      const aiRes = await api.addAi(room.gameId, { iterations: 100, timeoutMs: 500 });
       addLog(`AI 추가: ${aiRes.aiPlayerId}`);
     }
 
@@ -784,6 +784,29 @@ async function pollGameState(gameId: string): Promise<void> {
   void poll();
 }
 
+// ─── Game action state ────────────────────────────────────────────────────────
+
+let selectedUnitId: string | null = null;
+let selectedUnitPos: { row: number; col: number } | null = null;
+
+async function submitAction(action: {
+  type: "move" | "attack" | "pass";
+  unitId?: string;
+  targetPosition?: { row: number; col: number };
+}): Promise<void> {
+  if (!currentGameId) return;
+  const token = api.getToken();
+  if (!token) return;
+
+  try {
+    await fetch(`${API_BASE}/api/v1/rooms/${currentGameId}/action`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ playerId: humanPlayerId, action }),
+    });
+  } catch { /* ignore */ }
+}
+
 // ─── Game rendering ───────────────────────────────────────────────────────────
 
 function renderGame(state: GameStateSnapshot): void {
@@ -807,18 +830,81 @@ function renderGame(state: GameStateSnapshot): void {
     playerIds,
   });
 
-  // Turn indicator
+  // Check if it's human's turn
   const slot = state.turnOrder[state.currentTurnIndex];
+  const isMyTurn = slot?.playerId === humanPlayerId;
+
+  // Turn indicator
   const turnEl = document.getElementById("turn-indicator");
   if (turnEl) {
-    turnEl.textContent = slot !== undefined ? `${slot.playerId}` : "—";
+    if (isMyTurn) {
+      turnEl.textContent = "🟢 내 차례!";
+      turnEl.style.color = "var(--success)";
+    } else {
+      turnEl.textContent = slot !== undefined
+        ? `${slot.playerId.length > 14 ? slot.playerId.slice(0, 12) + "…" : slot.playerId}`
+        : "—";
+      turnEl.style.color = "var(--accent)";
+    }
   }
   const roundEl = document.getElementById("round-indicator");
-  if (roundEl) {
-    roundEl.textContent = `Round ${state.round}`;
-  }
+  if (roundEl) roundEl.textContent = `Round ${state.round}`;
+
+  // Show/hide pass button
+  const passBtn = document.getElementById("pass-btn") as HTMLButtonElement | null;
+  if (passBtn) passBtn.style.display = isMyTurn ? "block" : "none";
+
+  // Board click for human actions
+  setupBoardClick(canvas, state, isMyTurn, gridSize);
 
   renderPlayersList(state, playerIds, slot?.playerId);
+}
+
+function setupBoardClick(
+  canvas: HTMLCanvasElement,
+  state: GameStateSnapshot,
+  isMyTurn: boolean,
+  gridSize: number,
+): void {
+  // Remove previous listener
+  const newCanvas = canvas.cloneNode(true) as HTMLCanvasElement;
+  canvas.parentNode?.replaceChild(newCanvas, canvas);
+
+  if (!isMyTurn) return;
+
+  newCanvas.style.cursor = "pointer";
+  newCanvas.addEventListener("click", (e) => {
+    const rect = newCanvas.getBoundingClientRect();
+    const p = isoParams(gridSize);
+    const mx = (e.clientX - rect.left) * (newCanvas.width / rect.width);
+    const my = (e.clientY - rect.top) * (newCanvas.height / rect.height);
+    const { row, col } = screenToGrid(mx, my, p.cx, p.cy, p.HW, p.HH);
+    if (row < 0 || row >= gridSize || col < 0 || col >= gridSize) return;
+
+    // Find unit at clicked cell
+    const clickedUnit = Object.values(state.units).find(
+      (u) => u.alive && u.position.row === row && u.position.col === col,
+    );
+
+    if (clickedUnit && clickedUnit.playerId === humanPlayerId) {
+      // Select own unit
+      selectedUnitId = clickedUnit.unitId as string;
+      selectedUnitPos = { row, col };
+      const turnEl = document.getElementById("turn-indicator");
+      if (turnEl) turnEl.textContent = `🟢 ${UNIT_ABBR[clickedUnit.metaId as string] ?? "?"} 선택됨 — 이동/공격할 위치 클릭`;
+    } else if (selectedUnitId !== null) {
+      // Move or attack
+      if (clickedUnit && clickedUnit.playerId !== humanPlayerId) {
+        // Attack
+        void submitAction({ type: "attack", unitId: selectedUnitId, targetPosition: { row, col } });
+      } else {
+        // Move
+        void submitAction({ type: "move", unitId: selectedUnitId, targetPosition: { row, col } });
+      }
+      selectedUnitId = null;
+      selectedUnitPos = null;
+    }
+  });
 }
 
 function renderPlayersList(
@@ -879,6 +965,10 @@ document.getElementById("start-btn")?.addEventListener("click", () => {
 
 document.getElementById("ready-btn")?.addEventListener("click", () => {
   void submitPlacement();
+});
+
+document.getElementById("pass-btn")?.addEventListener("click", () => {
+  void submitAction({ type: "pass" });
 });
 
 document.getElementById("back-to-menu-btn")?.addEventListener("click", () => {
