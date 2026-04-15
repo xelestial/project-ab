@@ -621,10 +621,16 @@ export async function registerRoutes(
         return reply.code(400).send({ error: "Invalid action parameters" });
       }
 
-      // Submit to PassThroughAdapter (or HumanAdapter via queue)
+      // Submit to adapter — works for both PassThroughAdapter (REST-only) and HumanAdapter (WS)
       import("../ws/passthrough-adapter.js").then(({ PassThroughAdapter }) => {
         if (adapter instanceof PassThroughAdapter) {
           adapter.submitAction(playerAction);
+        } else {
+          import("../ws/human-adapter.js").then(({ HumanAdapter }) => {
+            if (adapter instanceof HumanAdapter) {
+              adapter.submitAction(playerAction);
+            }
+          }).catch(() => {});
         }
       }).catch(() => {});
 

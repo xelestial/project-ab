@@ -112,6 +112,18 @@ export class HumanAdapter implements IPlayerAdapter {
     });
   }
 
+  /**
+   * Submit an action externally (e.g. from the REST action endpoint).
+   * Equivalent to receiving an "action" WS message.
+   */
+  submitAction(action: PlayerAction): void {
+    if (this.pendingResolve !== undefined) {
+      const resolve = this.pendingResolve;
+      this.pendingResolve = undefined;
+      resolve(action);
+    }
+  }
+
   onStateUpdate(state: GameState): void {
     if (this.socket.readyState === 1 /* OPEN */) {
       const msg = encodeMessage({ type: "state_update", gameId: state.gameId, state });
