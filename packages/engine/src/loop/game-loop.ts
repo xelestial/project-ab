@@ -115,16 +115,38 @@ export class GameLoop implements IGameLoop {
           turnIndex: state.currentTurnIndex,
           state,
         });
-        // Request action from player
+
+        // ── Multi-action turn loop: unit may move then attack ────────────────
         const adapter = adapters.get(playerId);
-        if (adapter !== undefined) {
-          const action = await adapter.requestAction(state, this.TURN_TIMEOUT_MS).catch(() => ({
+        let turnEnded = false;
+
+        while (!turnEnded && adapter !== undefined) {
+          // If unit-level slot: stop when both actions used or unit died
+          if (slot.unitId !== undefined) {
+            const slotUnit = state.units[slot.unitId];
+            if (slotUnit === undefined || !slotUnit.alive) break;
+            if (slotUnit.actionsUsed.moved && slotUnit.actionsUsed.attacked) break;
+          }
+
+          const passAction: PlayerAction = {
             type: "pass" as const,
             playerId: playerId as import("@ab/metadata").PlayerId,
-            unitId: Object.values(state.units).find(
-              (u) => u.alive && u.playerId === playerId,
-            )?.unitId ?? ("" as import("@ab/metadata").UnitId),
-          }));
+            unitId: (slot.unitId ??
+              Object.values(state.units).find(
+                (u) => u.alive && u.playerId === playerId,
+              )?.unitId ??
+              "") as import("@ab/metadata").UnitId,
+          };
+
+          const action = await adapter
+            .requestAction(state, this.TURN_TIMEOUT_MS)
+            .catch(() => passAction);
+
+          // Pass always ends the turn
+          if (action.type === "pass") {
+            turnEnded = true;
+            break;
+          }
 
           const result = this.actionProcessor.process(action, state);
 
@@ -149,22 +171,30 @@ export class GameLoop implements IGameLoop {
           for (const [, a] of adapters) {
             if (a.playerId !== playerId) a.onStateUpdate(state);
           }
+
+          // Post-process after each sub-action
+          const subPostResult = this.postProcessor.run(state);
+          state = subPostResult.state;
+
+          if (subPostResult.end.ended) {
+            gameEnded = true;
+            this.eventBus.emit({
+              type: "game.end",
+              state,
+              winnerIds: subPostResult.end.winnerIds,
+              reason: subPostResult.end.reason ?? "unknown",
+            });
+            break;
+          }
+
+          // Attack always ends the turn (no attack-then-move)
+          if (action.type === "attack") {
+            turnEnded = true;
+            break;
+          }
         }
 
-        // Post-process
-        const postResult = this.postProcessor.run(state);
-        state = postResult.state;
-
-        if (postResult.end.ended) {
-          gameEnded = true;
-          this.eventBus.emit({
-            type: "game.end",
-            state,
-            winnerIds: postResult.end.winnerIds,
-            reason: postResult.end.reason ?? "unknown",
-          });
-          break;
-        }
+        if (gameEnded) break;
 
         this.eventBus.emit({
           type: "turn.end",

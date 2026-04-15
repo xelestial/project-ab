@@ -260,7 +260,25 @@ describe("DraftManager", () => {
 
     it("builds turn order with currentTurnIndex 0", () => {
       const { manager } = makeManager();
-      const state = makeDraftState();
+      // Add a unit for each player so unit-level slots are generated
+      const p1UnitId = "p1_t1_0" as import("@ab/metadata").UnitId;
+      const p2UnitId = "p2_t1_0" as import("@ab/metadata").UnitId;
+      const baseUnit = {
+        metaId: "t1" as import("@ab/metadata").MetaId,
+        currentHealth: 4, currentArmor: 0, movementPoints: 3,
+        activeEffects: [], actionsUsed: { moved: false, attacked: false, skillUsed: false, extinguished: false },
+        alive: true,
+      };
+      const state = makeDraftState({
+        units: {
+          [p1UnitId]: { ...baseUnit, unitId: p1UnitId, playerId: "p1" as import("@ab/metadata").PlayerId, position: { row: 0, col: 0 } },
+          [p2UnitId]: { ...baseUnit, unitId: p2UnitId, playerId: "p2" as import("@ab/metadata").PlayerId, position: { row: 9, col: 0 } },
+        },
+        players: {
+          p1: { playerId: "p1" as import("@ab/metadata").PlayerId, teamIndex: 0, priority: 1, unitIds: [p1UnitId], connected: true, surrendered: false },
+          p2: { playerId: "p2" as import("@ab/metadata").PlayerId, teamIndex: 1, priority: 1, unitIds: [p2UnitId], connected: true, surrendered: false },
+        },
+      });
 
       const newState = manager.finalizeDraft(state);
       expect(newState.currentTurnIndex).toBe(0);
@@ -297,25 +315,50 @@ describe("DraftManager", () => {
   });
 
   describe("buildTurnOrder", () => {
+    // Helper: build a minimal unit for a player
+    function makeTestUnit(unitId: string, playerId: string, row: number) {
+      return {
+        unitId: unitId as import("@ab/metadata").UnitId,
+        metaId: "t1" as import("@ab/metadata").MetaId,
+        playerId: playerId as import("@ab/metadata").PlayerId,
+        position: { row, col: 0 },
+        currentHealth: 4, currentArmor: 0, movementPoints: 3,
+        activeEffects: [], actionsUsed: { moved: false, attacked: false, skillUsed: false, extinguished: false },
+        alive: true,
+      };
+    }
+
     it("returns players sorted by priority", () => {
       const { manager } = makeManager();
+      const p1Unit = makeTestUnit("u_p1", "p1", 0);
+      const p2Unit = makeTestUnit("u_p2", "p2", 9);
       const state: GameState = {
         ...makeDraftState(),
+        units: { [p1Unit.unitId]: p1Unit, [p2Unit.unitId]: p2Unit },
         players: {
-          p1: { playerId: "p1" as import("@ab/metadata").PlayerId, teamIndex: 0, priority: 2, unitIds: [], connected: true, surrendered: false },
-          p2: { playerId: "p2" as import("@ab/metadata").PlayerId, teamIndex: 1, priority: 1, unitIds: [], connected: true, surrendered: false },
+          p1: { playerId: "p1" as import("@ab/metadata").PlayerId, teamIndex: 0, priority: 2, unitIds: [p1Unit.unitId], connected: true, surrendered: false },
+          p2: { playerId: "p2" as import("@ab/metadata").PlayerId, teamIndex: 1, priority: 1, unitIds: [p2Unit.unitId], connected: true, surrendered: false },
         },
       };
 
       const order = manager.buildTurnOrder(state, 1, null);
-      // Lower priority goes first
+      // Lower priority goes first — p2 (priority 1) before p1 (priority 2)
       expect(order[0]!.playerId).toBe("p2");
       expect(order[1]!.playerId).toBe("p1");
     });
 
     it("alternates first player in subsequent rounds when same priority", () => {
       const { manager } = makeManager();
-      const state = makeDraftState(); // both have priority 1
+      const p1Unit = makeTestUnit("u_p1", "p1", 0);
+      const p2Unit = makeTestUnit("u_p2", "p2", 9);
+      const state: GameState = {
+        ...makeDraftState(),
+        units: { [p1Unit.unitId]: p1Unit, [p2Unit.unitId]: p2Unit },
+        players: {
+          p1: { playerId: "p1" as import("@ab/metadata").PlayerId, teamIndex: 0, priority: 1, unitIds: [p1Unit.unitId], connected: true, surrendered: false },
+          p2: { playerId: "p2" as import("@ab/metadata").PlayerId, teamIndex: 1, priority: 1, unitIds: [p2Unit.unitId], connected: true, surrendered: false },
+        },
+      };
 
       const order = manager.buildTurnOrder(state, 2, "p1");
       // p1 went first last round → p2 should go first now
@@ -324,15 +367,19 @@ describe("DraftManager", () => {
 
     it("excludes surrendered players", () => {
       const { manager } = makeManager();
+      const p1Unit = makeTestUnit("u_p1", "p1", 0);
+      const p2Unit = makeTestUnit("u_p2", "p2", 9);
       const state: GameState = {
         ...makeDraftState(),
+        units: { [p1Unit.unitId]: p1Unit, [p2Unit.unitId]: p2Unit },
         players: {
-          p1: { playerId: "p1" as import("@ab/metadata").PlayerId, teamIndex: 0, priority: 1, unitIds: [], connected: true, surrendered: false },
-          p2: { playerId: "p2" as import("@ab/metadata").PlayerId, teamIndex: 1, priority: 1, unitIds: [], connected: true, surrendered: true },
+          p1: { playerId: "p1" as import("@ab/metadata").PlayerId, teamIndex: 0, priority: 1, unitIds: [p1Unit.unitId], connected: true, surrendered: false },
+          p2: { playerId: "p2" as import("@ab/metadata").PlayerId, teamIndex: 1, priority: 1, unitIds: [p2Unit.unitId], connected: true, surrendered: true },
         },
       };
 
       const order = manager.buildTurnOrder(state, 1, null);
+      // Only p1's unit should appear — p2 is surrendered
       expect(order).toHaveLength(1);
       expect(order[0]!.playerId).toBe("p1");
     });
