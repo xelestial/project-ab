@@ -2,7 +2,11 @@
  * Server entry point — Fastify + WebSocket + REST API.
  *
  * Usage:
- *   pnpm -F @ab/server build && node packages/server/dist/index.js
+ *   node packages/server/dist/index.js [--port 3000] [--host 0.0.0.0]
+ *
+ * CLI arguments (take precedence over environment variables):
+ *   --port <n>       — HTTP port (default: PORT env var or 3000)
+ *   --host <addr>    — bind host (default: HOST env var or 0.0.0.0)
  *
  * Environment variables:
  *   PORT             — HTTP port (default 3000)
@@ -131,11 +135,33 @@ export async function buildServer() {
   return fastify;
 }
 
+// ─── CLI argument parser ──────────────────────────────────────────────────────
+
+function parseCliArgs(argv: string[]): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
+    if (arg !== undefined && arg.startsWith("--")) {
+      const key = arg.slice(2);
+      const next = argv[i + 1];
+      if (next !== undefined && !next.startsWith("--")) {
+        result[key] = next;
+        i++;
+      } else {
+        result[key] = "true";
+      }
+    }
+  }
+  return result;
+}
+
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 if (process.env["NODE_ENV"] !== "test") {
-  const port = Number(process.env["PORT"] ?? 3000);
-  const host = process.env["HOST"] ?? "0.0.0.0";
+  const cliArgs = parseCliArgs(process.argv.slice(2));
+
+  const port = Number(cliArgs["port"] ?? process.env["PORT"] ?? 3000);
+  const host = cliArgs["host"] ?? process.env["HOST"] ?? "0.0.0.0";
 
   const server = await buildServer();
   await server.listen({ port, host });

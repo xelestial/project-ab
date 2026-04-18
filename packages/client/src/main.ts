@@ -42,14 +42,18 @@ interface PlacedUnit {
 
 // ─── State ─────────────────────────────────────────────────────────────────────
 
-const API_BASE =
-  window.location.port === "5173"
-    ? `${window.location.protocol}//${window.location.hostname}:3000`
-    : gameModes.serverUrl;
-const WS_BASE =
-  window.location.port === "5173"
-    ? `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.hostname}:3000`
-    : gameModes.wsUrl;
+// VITE_SERVER_PORT — override backend port in dev (e.g. VITE_SERVER_PORT=3001 pnpm dev)
+// Falls back to 3000 if not set.
+const _serverPort = (import.meta.env["VITE_SERVER_PORT"] as string | undefined) ?? "3000";
+const _serverHost = window.location.hostname;
+const _proto = window.location.protocol;
+
+const API_BASE = import.meta.env.DEV
+  ? `${_proto}//${_serverHost}:${_serverPort}`
+  : gameModes.serverUrl;
+const WS_BASE = import.meta.env.DEV
+  ? `${_proto === "https:" ? "wss" : "ws"}://${_serverHost}:${_serverPort}`
+  : gameModes.wsUrl;
 
 const api = new ApiClient(API_BASE);
 const ws = new WsClient();

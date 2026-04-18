@@ -4,9 +4,12 @@
     {
       "name": "client",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["-F", "@ab/client", "dev", "--host"],
-      "port": 5173,
-      "autoPort": false
+      "runtimeArgs": ["-F", "@ab/client", "dev", "--port", "5174", "--host"],
+      "port": 5174,
+      "autoPort": false,
+      "env": {
+        "VITE_SERVER_PORT": "3000"
+      }
     }
   ]
 }
