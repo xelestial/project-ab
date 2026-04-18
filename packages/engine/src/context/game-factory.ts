@@ -72,7 +72,7 @@ export class GameFactory {
     const tileManager = new TileManager(tileResolver, applicator);
     const turnManager = new TurnManager(applicator);
     const draftManager = new DraftManager(this.registry, applicator);
-    const roundManager = new RoundManager(applicator, draftManager);
+    const roundManager = new RoundManager(applicator);
 
     // ── Loop ───────────────────────────────────────────────────────────────
     const endDetector = new EndDetector();

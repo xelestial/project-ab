@@ -583,6 +583,9 @@ async function connectHumanPlayer(gameId: string): Promise<void> {
     onGameEnd: (winnerIds, reason) => {
       showGameOver(winnerIds, reason);
     },
+    onUnitOrderRequest: (aliveUnitIds, timeoutMs) => {
+      showUnitOrderDraft(aliveUnitIds, timeoutMs);
+    },
   });
 
   // Open placement screen immediately (player was already pre-registered)
@@ -1360,6 +1363,130 @@ function showGameOver(winnerIds: string[], reason: string): void {
     msg.textContent = `무승부 (${reason})`;
   }
   addLog(`게임 종료: ${winnerIds.length > 0 ? winnerIds.join(",") + " 승리" : "무승부"}`);
+}
+
+// ─── Unit Order Draft ─────────────────────────────────────────────────────────
+
+let unitOrderDraftTimer: ReturnType<typeof setInterval> | null = null;
+
+function showUnitOrderDraft(aliveUnitIds: string[], timeoutMs: number): void {
+  const overlay = document.getElementById("unit-order-overlay");
+  const listEl = document.getElementById("unit-order-list");
+  const timerEl = document.getElementById("unit-order-timer");
+  if (!overlay || !listEl || !timerEl) return;
+
+  // Use latest game state to get unit info
+  const state = lastGameState;
+
+  // Build draggable ordered list from aliveUnitIds (only player's own units)
+  const myUnitIds = aliveUnitIds.filter((uid) => state?.units[uid]?.playerId === humanPlayerId);
+  // If no units for this player (e.g., spectating), skip
+  if (myUnitIds.length === 0) return;
+
+  let orderedIds = [...myUnitIds];
+  listEl.innerHTML = "";
+
+  const renderList = () => {
+    listEl.innerHTML = "";
+    orderedIds.forEach((uid, idx) => {
+      const unit = state?.units[uid];
+      if (!unit) return;
+
+      const item = document.createElement("div");
+      item.className = "unit-order-item";
+      item.dataset["uid"] = uid;
+      item.draggable = true;
+
+      // Unit display info
+      const metaId = unit.metaId.replace("unit_", "");
+      const classMap: Record<string, string> = {
+        fighter: "전사", tank: "탱커", ranger: "레인저",
+        mage: "마법사", healer: "힐러", assassin: "암살자",
+      };
+      const className = Object.keys(classMap).find(k => metaId.includes(k));
+      const unitClass = className ? classMap[className] : metaId;
+
+      item.innerHTML = `
+        <span class="unit-order-num">${idx + 1}</span>
+        <span class="unit-order-icon">${getUnitEmoji(unit.metaId)}</span>
+        <span class="unit-order-name">${unitClass ?? metaId}</span>
+        <span class="unit-order-hp">HP ${unit.currentHealth}</span>
+        <span class="unit-order-drag">⠿</span>
+      `;
+
+      // Drag handlers
+      item.addEventListener("dragstart", (e) => {
+        e.dataTransfer?.setData("text/plain", uid);
+        item.classList.add("dragging");
+      });
+      item.addEventListener("dragend", () => item.classList.remove("dragging"));
+      item.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        item.classList.add("drag-over");
+      });
+      item.addEventListener("dragleave", () => item.classList.remove("drag-over"));
+      item.addEventListener("drop", (e) => {
+        e.preventDefault();
+        item.classList.remove("drag-over");
+        const draggedUid = e.dataTransfer?.getData("text/plain");
+        if (draggedUid === undefined || draggedUid === uid) return;
+        const fromIdx = orderedIds.indexOf(draggedUid);
+        const toIdx = orderedIds.indexOf(uid);
+        if (fromIdx === -1 || toIdx === -1) return;
+        orderedIds.splice(fromIdx, 1);
+        orderedIds.splice(toIdx, 0, draggedUid);
+        renderList();
+      });
+
+      listEl.appendChild(item);
+    });
+  };
+  renderList();
+
+  // Countdown timer
+  let remaining = Math.ceil(timeoutMs / 1000);
+  timerEl.textContent = `${remaining}초`;
+  if (unitOrderDraftTimer !== null) clearInterval(unitOrderDraftTimer);
+  unitOrderDraftTimer = setInterval(() => {
+    remaining -= 1;
+    timerEl.textContent = `${remaining}초`;
+    if (remaining <= 0) {
+      submitUnitOrder(orderedIds);
+    }
+  }, 1000);
+
+  overlay.classList.remove("hidden");
+
+  // Submit button
+  const submitBtn = document.getElementById("unit-order-submit");
+  if (submitBtn) {
+    const handler = () => submitUnitOrder(orderedIds);
+    submitBtn.replaceWith(submitBtn.cloneNode(true)); // remove old listeners
+    document.getElementById("unit-order-submit")?.addEventListener("click", handler);
+  }
+}
+
+function getUnitEmoji(metaId: string): string {
+  if (metaId.includes("fighter")) return "⚔️";
+  if (metaId.includes("tank")) return "🛡️";
+  if (metaId.includes("ranger")) return "🏹";
+  if (metaId.includes("mage")) return "🔮";
+  if (metaId.includes("healer")) return "💚";
+  if (metaId.includes("assassin")) return "🗡️";
+  return "🧙";
+}
+
+function submitUnitOrder(orderedIds: string[]): void {
+  if (unitOrderDraftTimer !== null) {
+    clearInterval(unitOrderDraftTimer);
+    unitOrderDraftTimer = null;
+  }
+  const overlay = document.getElementById("unit-order-overlay");
+  overlay?.classList.add("hidden");
+
+  if (currentGameId) {
+    ws.sendUnitOrder(currentGameId, orderedIds);
+  }
 }
 
 // ─── Bootstrap ────────────────────────────────────────────────────────────────

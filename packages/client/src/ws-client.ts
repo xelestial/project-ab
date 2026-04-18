@@ -41,17 +41,20 @@ type WsMessage =
   | { type: "joined"; gameId: string; playerId: string }
   | { type: "state_update"; gameId: string; state: GameStateSnapshot }
   | { type: "game_end"; gameId: string; winnerIds: string[]; reason: string }
+  | { type: "request_unit_order"; gameId: string; aliveUnitIds: string[]; timeoutMs: number }
   | { type: "error"; code: string; message: string }
   | { type: "pong" };
 
 export type StateUpdateHandler = (state: GameStateSnapshot) => void;
 export type GameEndHandler = (winnerIds: string[], reason: string) => void;
+export type UnitOrderRequestHandler = (aliveUnitIds: string[], timeoutMs: number) => void;
 
 export class WsClient {
   private ws: WebSocket | null = null;
   private onStateUpdate: StateUpdateHandler | null = null;
   private onGameEnd: GameEndHandler | null = null;
   private onJoined: (() => void) | null = null;
+  private onUnitOrderRequest: UnitOrderRequestHandler | null = null;
   private pingInterval: ReturnType<typeof setInterval> | null = null;
 
   connect(
@@ -62,11 +65,13 @@ export class WsClient {
       onJoined?: () => void;
       onStateUpdate?: StateUpdateHandler;
       onGameEnd?: GameEndHandler;
+      onUnitOrderRequest?: UnitOrderRequestHandler;
     },
   ): void {
     this.onJoined = handlers.onJoined ?? null;
     this.onStateUpdate = handlers.onStateUpdate ?? null;
     this.onGameEnd = handlers.onGameEnd ?? null;
+    this.onUnitOrderRequest = handlers.onUnitOrderRequest ?? null;
 
     this.ws = new WebSocket(`${wsBaseUrl}/ws/game/${gameId}`);
 
@@ -100,6 +105,9 @@ export class WsClient {
         case "game_end":
           this.onGameEnd?.(msg.winnerIds, msg.reason);
           break;
+        case "request_unit_order":
+          this.onUnitOrderRequest?.(msg.aliveUnitIds, msg.timeoutMs);
+          break;
       }
     };
 
@@ -110,6 +118,10 @@ export class WsClient {
 
   sendAction(action: unknown): void {
     this.send({ type: "action", action });
+  }
+
+  sendUnitOrder(gameId: string, unitOrder: string[]): void {
+    this.send({ type: "unit_order", gameId, unitOrder });
   }
 
   disconnect(): void {

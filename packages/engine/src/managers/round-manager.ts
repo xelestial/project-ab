@@ -3,7 +3,6 @@
  */
 import type { GameState } from "@ab/metadata";
 import type { IStateApplicator } from "../state/state-applicator.js";
-import type { IDraftManager } from "./draft-manager.js";
 import { MAX_ROUNDS } from "@ab/metadata";
 
 export interface IRoundManager {
@@ -13,30 +12,17 @@ export interface IRoundManager {
 }
 
 export class RoundManager implements IRoundManager {
-  constructor(
-    private readonly applicator: IStateApplicator,
-    private readonly draftManager: IDraftManager,
-  ) {}
+  constructor(private readonly applicator: IStateApplicator) {}
 
   startRound(state: GameState): GameState {
     // Reset all unit actions for the new round
+    // (Turn order is set by the game loop before this is called)
     const unitResets = Object.values(state.units)
       .filter((u) => u.alive)
       .map((u) => ({ type: "unit_actions_reset" as const, unitId: u.unitId }));
 
-    let newState = this.applicator.apply(unitResets, state);
-
-    // Build new turn order (DraftManager handles priority / alternation)
-    // For subsequent rounds, pass last first player for alternation
-    const lastFirstPlayerId =
-      state.turnOrder[0]?.playerId ?? null;
-
-    const turnOrder = (this.draftManager as import("./draft-manager.js").DraftManager)
-      .buildTurnOrder(newState, newState.round, lastFirstPlayerId);
-
-    newState = { ...newState, turnOrder, currentTurnIndex: 0 };
-
-    return newState;
+    const newState = this.applicator.apply(unitResets, state);
+    return { ...newState, currentTurnIndex: 0 };
   }
 
   endRound(state: GameState): GameState {

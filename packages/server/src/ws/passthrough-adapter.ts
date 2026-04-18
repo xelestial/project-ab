@@ -4,6 +4,7 @@
  * On each turn, it blocks until an action is submitted or the timeout fires (auto-pass).
  */
 import type { GameState, PlayerAction, PlayerId, UnitId } from "@ab/metadata";
+
 import type { IPlayerAdapter } from "@ab/engine";
 
 export class PassThroughAdapter implements IPlayerAdapter {
@@ -12,6 +13,8 @@ export class PassThroughAdapter implements IPlayerAdapter {
   private pendingResolve: ((action: PlayerAction) => void) | undefined = undefined;
   private pendingTimer: ReturnType<typeof setTimeout> | undefined = undefined;
   private stateListeners: ((state: GameState) => void)[] = [];
+  private pendingUnitOrderResolve: ((order: UnitId[]) => void) | undefined = undefined;
+  private pendingUnitOrderTimer: ReturnType<typeof setTimeout> | undefined = undefined;
 
   constructor(readonly playerId: string) {}
 
@@ -38,7 +41,41 @@ export class PassThroughAdapter implements IPlayerAdapter {
     };
   }
 
+  /**
+   * Submit a unit order externally (e.g. from the REST endpoint).
+   */
+  submitUnitOrder(order: UnitId[]): void {
+    if (this.pendingUnitOrderResolve !== undefined) {
+      clearTimeout(this.pendingUnitOrderTimer);
+      this.pendingUnitOrderTimer = undefined;
+      const resolve = this.pendingUnitOrderResolve;
+      this.pendingUnitOrderResolve = undefined;
+      resolve(order);
+    }
+  }
+
   // ── IPlayerAdapter ──────────────────────────────────────────────────────────
+
+  async requestUnitOrder(
+    state: GameState,
+    aliveUnitIds: UnitId[],
+    timeoutMs: number,
+  ): Promise<UnitId[]> {
+    this.onStateUpdate(state);
+
+    return new Promise((resolve) => {
+      this.pendingUnitOrderTimer = setTimeout(() => {
+        this.pendingUnitOrderResolve = undefined;
+        resolve(aliveUnitIds); // auto-submit in default order
+      }, timeoutMs);
+
+      this.pendingUnitOrderResolve = (order) => {
+        clearTimeout(this.pendingUnitOrderTimer);
+        this.pendingUnitOrderTimer = undefined;
+        resolve(order);
+      };
+    });
+  }
 
   async requestDraftPlacement(
     _state: GameState,

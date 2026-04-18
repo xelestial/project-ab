@@ -136,6 +136,34 @@ export class MCTSAdapter implements IPlayerAdapter {
     return best.action ?? this.makePass(state);
   }
 
+  async requestUnitOrder(
+    state: GameState,
+    aliveUnitIds: UnitId[],
+    _timeoutMs: number,
+  ): Promise<UnitId[]> {
+    // Heuristic: units that can attack enemies right now go first
+    const enemies = Object.values(state.units).filter(
+      (u) => u.alive && u.playerId !== this.playerId,
+    );
+    const sorted = [...aliveUnitIds].sort((a, b) => {
+      const ua = state.units[a];
+      const ub = state.units[b];
+      if (ua === undefined || ub === undefined) return 0;
+      const aEnemyTargets = this.attackValidator
+        .getAttackableTargets(ua, state)
+        .filter((pos) =>
+          enemies.some((e) => e.position.row === pos.row && e.position.col === pos.col),
+        ).length;
+      const bEnemyTargets = this.attackValidator
+        .getAttackableTargets(ub, state)
+        .filter((pos) =>
+          enemies.some((e) => e.position.row === pos.row && e.position.col === pos.col),
+        ).length;
+      return bEnemyTargets - aEnemyTargets; // more enemies in range → acts first
+    });
+    return sorted;
+  }
+
   onStateUpdate(_state: GameState): void {
     // 향후 점진적 트리 재사용에 사용 가능
   }

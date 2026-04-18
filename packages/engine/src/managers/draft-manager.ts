@@ -29,6 +29,12 @@ export interface IDraftManager {
   finalizeDraft(state: GameState): GameState;
   applyTimeout(state: GameState): GameState;
   isDraftComplete(state: GameState): boolean;
+  buildTurnOrder(
+    state: GameState,
+    round: number,
+    lastFirstPlayerId: string | null,
+    unitOrders?: Map<string, UnitId[]>,
+  ): TurnSlot[];
 }
 
 export class DraftManager implements IDraftManager {
@@ -271,6 +277,7 @@ export class DraftManager implements IDraftManager {
     state: GameState,
     round: number,
     lastFirstPlayerId: string | null,
+    unitOrders?: Map<string, UnitId[]>,
   ): TurnSlot[] {
     const players = Object.values(state.players).filter((p) => !p.surrendered);
 
@@ -287,29 +294,39 @@ export class DraftManager implements IDraftManager {
     const samePriority = players.every((p) => p.priority === players[0]!.priority);
     if (samePriority) {
       if (round === 1 || lastFirstPlayerId === null) {
-        // Random
+        // Random coin flip
         if (Math.random() < 0.5) players.reverse();
       } else {
         // Alternate: whoever went first last round goes last this round
         const lastFirstIdx = players.findIndex((p) => p.playerId === lastFirstPlayerId);
         if (lastFirstIdx === 0) {
-          // Move the previous first-player to the end
           const [first, ...rest] = players;
           players.splice(0, players.length, ...rest, first!);
         }
       }
     }
 
-    // Get alive units per player, shuffled randomly
-    const unitsByPlayer = new Map<string, string[]>();
+    // Determine unit activation order per player
+    const unitsByPlayer = new Map<string, UnitId[]>();
     for (const player of players) {
-      const alive = (player.unitIds as string[]).filter((uid) => state.units[uid]?.alive);
-      // Shuffle the unit order randomly each round
-      for (let i = alive.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [alive[i], alive[j]] = [alive[j]!, alive[i]!];
+      const aliveIds = (player.unitIds as UnitId[]).filter((uid) => state.units[uid]?.alive);
+
+      if (unitOrders !== undefined) {
+        // Use player-submitted order; append any alive units not included
+        const submitted = unitOrders.get(player.playerId) ?? [];
+        const aliveSet = new Set<UnitId>(aliveIds);
+        const valid = submitted.filter((uid) => aliveSet.has(uid));
+        const missing = aliveIds.filter((uid) => !valid.includes(uid));
+        unitsByPlayer.set(player.playerId, [...valid, ...missing]);
+      } else {
+        // Fallback (round 1 finalize / test): shuffle randomly
+        const shuffled = [...aliveIds];
+        for (let i = shuffled.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [shuffled[i], shuffled[j]] = [shuffled[j]!, shuffled[i]!];
+        }
+        unitsByPlayer.set(player.playerId, shuffled);
       }
-      unitsByPlayer.set(player.playerId, alive);
     }
 
     // Interleave: P1U0, P2U0, P1U1, P2U1, P1U2, P2U2, ...
@@ -321,7 +338,7 @@ export class DraftManager implements IDraftManager {
         if (i < units.length) {
           slots.push({
             playerId: player.playerId,
-            unitId: units[i] as import("@ab/metadata").UnitId,
+            unitId: units[i]!,
             priority: player.priority,
           });
         }

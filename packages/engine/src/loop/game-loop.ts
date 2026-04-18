@@ -2,7 +2,7 @@
  * GameLoop — full game orchestration.
  * Draft → Round loop → Turn loop → Action → PostProcess → End check
  */
-import type { GameState, PlayerAction } from "@ab/metadata";
+import type { GameState, PlayerAction, UnitId } from "@ab/metadata";
 import type { IActionProcessor } from "./action-processor.js";
 import type { IPostProcessor } from "./post-processor.js";
 import type { IRoundManager } from "../managers/round-manager.js";
@@ -26,6 +26,17 @@ export interface IPlayerAdapter {
 
   requestAction(state: GameState, timeoutMs: number): Promise<PlayerAction>;
 
+  /**
+   * Called once at the start of each round. The player submits the desired
+   * activation order for their alive units (first element = acts first).
+   * Timeout auto-submits in the default order.
+   */
+  requestUnitOrder(
+    state: GameState,
+    aliveUnitIds: UnitId[],
+    timeoutMs: number,
+  ): Promise<UnitId[]>;
+
   onStateUpdate(state: GameState): void;
 }
 
@@ -46,6 +57,7 @@ export interface IGameLoop {
 
 export class GameLoop implements IGameLoop {
   private readonly TURN_TIMEOUT_MS = 60_000;
+  private readonly UNIT_ORDER_TIMEOUT_MS = 30_000;
 
   constructor(
     private readonly roundManager: IRoundManager,
@@ -81,6 +93,17 @@ export class GameLoop implements IGameLoop {
     let gameEnded = false;
 
     while (!gameEnded) {
+      // ── Unit order draft: each player picks their unit activation order ──────
+      const lastFirstPlayerId = state.round > 1 ? (state.turnOrder[0]?.playerId ?? null) : null;
+      const unitOrders = await this.collectUnitOrders(adapters, state, this.UNIT_ORDER_TIMEOUT_MS);
+      const turnOrder = this.draftManager.buildTurnOrder(
+        state,
+        state.round,
+        lastFirstPlayerId,
+        unitOrders,
+      );
+      state = { ...state, turnOrder };
+
       // Round start
       this.eventBus.emit({ type: "round.start", round: state.round, state });
       state = this.roundManager.startRound(state);
@@ -240,6 +263,38 @@ export class GameLoop implements IGameLoop {
       reason: state.endResult?.result ?? "unknown",
       finalState: state,
     };
+  }
+
+  // ─── Unit order collection ────────────────────────────────────────────────
+
+  /**
+   * Ask every player to submit their unit activation order for the coming round.
+   * Both players are asked concurrently; either may time out and auto-submit.
+   */
+  private async collectUnitOrders(
+    adapters: Map<string, IPlayerAdapter>,
+    state: GameState,
+    timeoutMs: number,
+  ): Promise<Map<string, UnitId[]>> {
+    const orders = new Map<string, UnitId[]>();
+    await Promise.all(
+      [...adapters.entries()].map(async ([playerId, adapter]) => {
+        const aliveUnitIds = Object.values(state.units)
+          .filter((u) => u.alive && u.playerId === playerId)
+          .map((u) => u.unitId) as UnitId[];
+        try {
+          const submitted = await adapter.requestUnitOrder(state, aliveUnitIds, timeoutMs);
+          // Validate: keep only alive unit IDs, append any the player missed
+          const aliveSet = new Set<UnitId>(aliveUnitIds);
+          const valid = submitted.filter((uid) => aliveSet.has(uid));
+          const missing = aliveUnitIds.filter((uid) => !valid.includes(uid));
+          orders.set(playerId, [...valid, ...missing]);
+        } catch {
+          orders.set(playerId, aliveUnitIds);
+        }
+      }),
+    );
+    return orders;
   }
 
   // ─── Draft phase logic ────────────────────────────────────────────────────

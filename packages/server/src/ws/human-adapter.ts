@@ -5,7 +5,7 @@
  * Reconnection support: `replaceSocket()` swaps in a new WebSocket when a player
  * reconnects mid-game, allowing pending action promises to resolve via the new socket.
  */
-import type { GameState, PlayerAction, PlayerId, UnitId } from "@ab/metadata";
+import type { GameState, GameId, PlayerAction, PlayerId, UnitId } from "@ab/metadata";
 import type { IPlayerAdapter } from "@ab/engine";
 import type { WebSocket } from "@fastify/websocket";
 import { encodeMessage, decodeMessage } from "./ws-protocol.js";
@@ -17,6 +17,7 @@ export class HumanAdapter implements IPlayerAdapter {
   private messageHandler: (raw: Buffer | string) => void;
   private pendingResolve: ((action: PlayerAction) => void) | undefined = undefined;
   private pendingDraftResolve: ((action: Extract<PlayerAction, { type: "draft_place" }>) => void) | undefined = undefined;
+  private pendingUnitOrderResolve: ((order: UnitId[]) => void) | undefined = undefined;
 
   /** true while the underlying socket is open */
   get connected(): boolean {
@@ -38,7 +39,10 @@ export class HumanAdapter implements IPlayerAdapter {
       const msg = decodeMessage(text);
       if (msg === null) return;
 
-      if (msg.type === "action") {
+      if (msg.type === "unit_order" && this.pendingUnitOrderResolve !== undefined) {
+        this.pendingUnitOrderResolve(msg.unitOrder as UnitId[]);
+        this.pendingUnitOrderResolve = undefined;
+      } else if (msg.type === "action") {
         if (msg.action.type === "draft_place" && this.pendingDraftResolve !== undefined) {
           this.pendingDraftResolve(msg.action);
           this.pendingDraftResolve = undefined;
@@ -66,6 +70,42 @@ export class HumanAdapter implements IPlayerAdapter {
     // Catch up the reconnected client
     if (currentState !== undefined) {
       this.onStateUpdate(currentState);
+    }
+  }
+
+  async requestUnitOrder(
+    state: GameState,
+    aliveUnitIds: UnitId[],
+    timeoutMs: number,
+  ): Promise<UnitId[]> {
+    this.sendMessage({
+      type: "request_unit_order",
+      gameId: state.gameId as unknown as string,
+      aliveUnitIds: aliveUnitIds as unknown as string[],
+      timeoutMs,
+    });
+
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        this.pendingUnitOrderResolve = undefined;
+        resolve(aliveUnitIds); // auto-submit in default order
+      }, timeoutMs);
+
+      this.pendingUnitOrderResolve = (order) => {
+        clearTimeout(timer);
+        resolve(order);
+      };
+    });
+  }
+
+  /**
+   * Submit a unit order externally (e.g. from the REST endpoint).
+   */
+  submitUnitOrder(order: UnitId[]): void {
+    if (this.pendingUnitOrderResolve !== undefined) {
+      const resolve = this.pendingUnitOrderResolve;
+      this.pendingUnitOrderResolve = undefined;
+      resolve(order);
     }
   }
 

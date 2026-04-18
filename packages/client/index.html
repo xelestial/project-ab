@@ -414,6 +414,63 @@
       border-top: 1px solid var(--border); padding-top: 4px; margin-top: 3px;
     }
 
+    /* ── Unit Order Draft overlay ── */
+    #unit-order-overlay {
+      position: fixed; inset: 0; z-index: 200;
+      background: rgba(0,0,0,0.75);
+      display: flex; align-items: center; justify-content: center;
+    }
+    #unit-order-overlay.hidden { display: none !important; }
+    .unit-order-modal {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 20px 24px;
+      min-width: 320px; max-width: 460px; width: 90%;
+    }
+    .unit-order-modal h2 {
+      font-size: 1rem; font-weight: 700; margin-bottom: 4px;
+      color: var(--accent);
+    }
+    .unit-order-subtitle {
+      font-size: 0.75rem; color: var(--text2); margin-bottom: 14px;
+    }
+    #unit-order-list {
+      display: flex; flex-direction: column; gap: 8px;
+      margin-bottom: 14px;
+    }
+    .unit-order-item {
+      display: flex; align-items: center; gap: 10px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px; padding: 8px 12px;
+      cursor: grab; user-select: none;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .unit-order-item.dragging { opacity: 0.5; }
+    .unit-order-item.drag-over { border-color: var(--accent); background: #161b2280; }
+    .unit-order-num {
+      font-size: 0.75rem; font-weight: 700; color: var(--text2);
+      min-width: 18px;
+    }
+    .unit-order-icon { font-size: 1.2rem; }
+    .unit-order-name { flex: 1; font-weight: 600; font-size: 0.85rem; }
+    .unit-order-hp { font-size: 0.75rem; color: var(--success); }
+    .unit-order-drag { color: var(--text2); font-size: 1rem; }
+    .unit-order-footer {
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    #unit-order-timer {
+      font-size: 0.85rem; color: var(--warn); font-weight: 600;
+    }
+    #unit-order-submit {
+      background: var(--accent); color: #fff;
+      border: none; border-radius: 6px;
+      padding: 8px 20px; font-size: 0.9rem; font-weight: 600;
+      cursor: pointer;
+    }
+    #unit-order-submit:hover { opacity: 0.85; }
+
     /* ── Util ── */
     .hidden { display: none !important; }
     .tag {
@@ -427,6 +484,19 @@
 <body>
   <!-- Global hover tooltip -->
   <div id="hover-tooltip"></div>
+
+  <!-- Unit Order Draft overlay (shown at start of each round) -->
+  <div id="unit-order-overlay" class="hidden">
+    <div class="unit-order-modal">
+      <h2>⚔️ 유닛 행동 순서 결정</h2>
+      <p class="unit-order-subtitle">드래그로 이번 라운드 내 유닛의 행동 순서를 정하세요.</p>
+      <div id="unit-order-list"></div>
+      <div class="unit-order-footer">
+        <span id="unit-order-timer">30초</span>
+        <button id="unit-order-submit">확인</button>
+      </div>
+    </div>
+  </div>
 
   <header>
     <h1>⚔ PROJECT AB</h1>

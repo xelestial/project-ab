@@ -27,6 +27,11 @@ export const ClientMessageSchema = z.discriminatedUnion("type", [
     action: PlayerActionSchema,
   }),
   z.object({
+    type: z.literal("unit_order"),
+    gameId: z.string(),
+    unitOrder: z.array(z.string()),
+  }),
+  z.object({
     type: z.literal("ping"),
   }),
   z.object({
@@ -80,6 +85,12 @@ export const ServerMessageSchema = z.discriminatedUnion("type", [
     gameId: z.string(),
     winnerIds: z.array(z.string()),
     reason: z.string(),
+  }),
+  z.object({
+    type: z.literal("request_unit_order"),
+    gameId: z.string(),
+    aliveUnitIds: z.array(z.string()),
+    timeoutMs: z.number(),
   }),
   z.object({
     type: z.literal("pong"),

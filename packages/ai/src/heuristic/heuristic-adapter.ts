@@ -104,6 +104,14 @@ export class HeuristicAdapter implements IPlayerAdapter {
     };
   }
 
+  async requestUnitOrder(
+    _state: GameState,
+    aliveUnitIds: UnitId[],
+    _timeoutMs: number,
+  ): Promise<UnitId[]> {
+    return [...aliveUnitIds];
+  }
+
   onStateUpdate(_state: GameState): void {}
 
   // ─── Scoring helpers ───────────────────────────────────────────────────────

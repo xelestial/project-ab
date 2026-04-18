@@ -712,6 +712,56 @@ export async function registerRoutes(
     },
   );
 
+  // ── Unit order draft (protected) ─────────────────────────────────────────
+
+  /**
+   * POST /api/v1/rooms/:gameId/unit-order
+   * Submit this player's unit activation order for the current round draft.
+   * Body: { playerId: string, unitOrder: string[] }
+   */
+  fastify.post<{ Params: { gameId: string } }>(
+    "/api/v1/rooms/:gameId/unit-order",
+    { preHandler: requireAuth },
+    async (req, reply) => {
+      const { gameId } = req.params;
+      const body = req.body as { playerId?: string; unitOrder?: string[] };
+      if (!Array.isArray(body.unitOrder)) {
+        return reply.code(400).send({ error: "unitOrder must be an array" });
+      }
+
+      const playerId = body.playerId ?? (req.jwtPayload?.sub as string) ?? "";
+      const session = sessionManager.getSession(gameId);
+      if (session === undefined || session.status !== "running") {
+        return reply.code(404).send({ error: "Game not found or not running" });
+      }
+
+      const adapter = session.adapters.get(playerId);
+      if (adapter === undefined) {
+        return reply.code(403).send({ error: "Player not in this game" });
+      }
+
+      const unitOrder = body.unitOrder as import("@ab/metadata").UnitId[];
+      // Works for both PassThroughAdapter and HumanAdapter
+      import("../ws/passthrough-adapter.js")
+        .then(({ PassThroughAdapter }) => {
+          if (adapter instanceof PassThroughAdapter) {
+            adapter.submitUnitOrder(unitOrder);
+          } else {
+            import("../ws/human-adapter.js")
+              .then(({ HumanAdapter }) => {
+                if (adapter instanceof HumanAdapter) {
+                  adapter.submitUnitOrder(unitOrder);
+                }
+              })
+              .catch(() => {});
+          }
+        })
+        .catch(() => {});
+
+      return reply.send({ ok: true });
+    },
+  );
+
   // ── Matchmaking (protected) ───────────────────────────────────────────────
 
   /**

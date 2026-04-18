@@ -7,7 +7,6 @@ import { TileManager } from "../managers/tile-manager.js";
 import { EffectManager } from "../managers/effect-manager.js";
 import { TurnManager } from "../managers/turn-manager.js";
 import { RoundManager } from "../managers/round-manager.js";
-import { DraftManager } from "../managers/draft-manager.js";
 import { TileResolver } from "../resolvers/tile-resolver.js";
 import { TileValidator } from "../validators/tile-validator.js";
 import { EffectResolver } from "../resolvers/effect-resolver.js";
@@ -295,10 +294,8 @@ describe("TurnManager", () => {
 
 describe("RoundManager", () => {
   it("endRound: increments round counter", () => {
-    const registry = makeRegistry();
     const applicator = makeApplicator();
-    const draftManager = new DraftManager(registry, applicator);
-    const manager = new RoundManager(applicator, draftManager);
+    const manager = new RoundManager(applicator);
     const state = TestStateBuilder.create()
       .withUnit("u1", "f1", "p1", 5, 5)
       .withUnit("u2", "f1", "p2", 5, 8)
@@ -309,10 +306,8 @@ describe("RoundManager", () => {
   });
 
   it("startRound: resets all units' actionsUsed", () => {
-    const registry = makeRegistry();
     const applicator = makeApplicator();
-    const draftManager = new DraftManager(registry, applicator);
-    const manager = new RoundManager(applicator, draftManager);
+    const manager = new RoundManager(applicator);
     const state = TestStateBuilder.create()
       .withUnit("u1", "f1", "p1", 5, 5, {
         actionsUsed: { moved: true, attacked: true, skillUsed: true, extinguished: true },
@@ -328,19 +323,15 @@ describe("RoundManager", () => {
   });
 
   it("isLastRound: returns true at round 30", () => {
-    const registry = makeRegistry();
     const applicator = makeApplicator();
-    const draftManager = new DraftManager(registry, applicator);
-    const manager = new RoundManager(applicator, draftManager);
+    const manager = new RoundManager(applicator);
     const state = { ...TestStateBuilder.create().build(), round: 30 };
     expect(manager.isLastRound(state)).toBe(true);
   });
 
   it("isLastRound: returns false before round 30", () => {
-    const registry = makeRegistry();
     const applicator = makeApplicator();
-    const draftManager = new DraftManager(registry, applicator);
-    const manager = new RoundManager(applicator, draftManager);
+    const manager = new RoundManager(applicator);
     const state = TestStateBuilder.create().build();
     expect(manager.isLastRound(state)).toBe(false);
   });
