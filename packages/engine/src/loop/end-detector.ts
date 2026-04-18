@@ -33,19 +33,55 @@ export class EndDetector implements IEndDetector {
       return { ended: true, winnerIds: winners, reason: "surrender" };
     }
 
-    // All units dead for a player
+    // All units dead — check per-team if teams are present, else per-player
     const playerUnitCounts = this.countAliveUnits(state);
 
-    for (const [playerId, count] of playerUnitCounts) {
-      if (count === 0) {
-        const winners = [...playerUnitCounts.entries()]
-          .filter(([pid, cnt]) => pid !== playerId && cnt > 0)
-          .map(([pid]) => pid);
-        return {
-          ended: true,
-          winnerIds: winners,
-          reason: "all_units_dead",
-        };
+    // Build team → [playerId] map
+    const teamMap = new Map<number, string[]>();
+    for (const player of Object.values(state.players)) {
+      const team = player.teamIndex ?? -1;
+      if (!teamMap.has(team)) teamMap.set(team, []);
+      teamMap.get(team)!.push(player.playerId);
+    }
+
+    const hasTeams = teamMap.size > 1 && !teamMap.has(-1);
+
+    if (hasTeams) {
+      // Team-based: a team loses when ALL its players have 0 alive units
+      for (const [teamIndex, teamPlayerIds] of teamMap) {
+        const teamAlive = teamPlayerIds.reduce(
+          (sum, pid) => sum + (playerUnitCounts.get(pid) ?? 0),
+          0,
+        );
+        if (teamAlive === 0) {
+          // All other teams with at least one alive unit are winners
+          const winnerIds: string[] = [];
+          for (const [otherTeam, otherPlayerIds] of teamMap) {
+            if (otherTeam === teamIndex) continue;
+            const otherAlive = otherPlayerIds.reduce(
+              (sum, pid) => sum + (playerUnitCounts.get(pid) ?? 0),
+              0,
+            );
+            if (otherAlive > 0) {
+              winnerIds.push(...otherPlayerIds);
+            }
+          }
+          return { ended: true, winnerIds, reason: "all_units_dead" };
+        }
+      }
+    } else {
+      // FFA / no-team: per-player check (original behaviour)
+      for (const [playerId, count] of playerUnitCounts) {
+        if (count === 0) {
+          const winners = [...playerUnitCounts.entries()]
+            .filter(([pid, cnt]) => pid !== playerId && cnt > 0)
+            .map(([pid]) => pid);
+          return {
+            ended: true,
+            winnerIds: winners,
+            reason: "all_units_dead",
+          };
+        }
       }
     }
 
