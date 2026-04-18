@@ -571,6 +571,7 @@ async function connectHumanPlayer(gameId: string): Promise<void> {
   }, 3000);
 
   ws.connect(WS_BASE, gameId, humanPlayerId, {
+    token: api.getToken() ?? "",
     onJoined: () => {
       clearTimeout(timeout);
       setStatus("WS 접속 완료!", "ok");

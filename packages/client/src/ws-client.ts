@@ -66,6 +66,7 @@ export class WsClient {
       onStateUpdate?: StateUpdateHandler;
       onGameEnd?: GameEndHandler;
       onUnitOrderRequest?: UnitOrderRequestHandler;
+      token?: string;
     },
   ): void {
     this.onJoined = handlers.onJoined ?? null;
@@ -76,7 +77,7 @@ export class WsClient {
     this.ws = new WebSocket(`${wsBaseUrl}/ws/game/${gameId}`);
 
     this.ws.onopen = () => {
-      this.send({ type: "join", gameId, playerId });
+      this.send({ type: "join", gameId, playerId, token: handlers.token ?? "" });
       // Keepalive
       this.pingInterval = setInterval(() => {
         this.send({ type: "ping" });

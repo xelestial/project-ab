@@ -78,6 +78,8 @@ export class HumanAdapter implements IPlayerAdapter {
     aliveUnitIds: UnitId[],
     timeoutMs: number,
   ): Promise<UnitId[]> {
+    // Send current state first so the client has up-to-date unit data before showing the draft UI
+    this.onStateUpdate(state);
     this.sendMessage({
       type: "request_unit_order",
       gameId: state.gameId as unknown as string,
