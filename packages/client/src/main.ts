@@ -60,8 +60,13 @@ const ws = new WsClient();
 
 let currentMode: GameMode | null = null;
 let seatTypes: ("human" | "ai")[] = [];
-let humanPlayerId = `player_${Math.random().toString(36).slice(2, 8)}`;
-let currentGameId: string | null = null;
+
+// Persist player ID across page refreshes — generates once, then reuses from localStorage
+let humanPlayerId: string = localStorage.getItem("ab_player_id") ??
+  `player_${Math.random().toString(36).slice(2, 8)}`;
+localStorage.setItem("ab_player_id", humanPlayerId);
+
+let currentGameId: string | null = localStorage.getItem("ab_game_id");
 let humanTeamIndex = 0;
 let logEntries: string[] = [];
 let availableUnits: UnitMeta[] = [];
@@ -479,6 +484,9 @@ function openLobby(mode: GameMode): void {
   seatTypes = mode.seats.map((s) => s.defaultType);
   document.getElementById("lobby-title")!.textContent = mode.nameKo;
   setStatus("", "");
+  // Always re-enable start button when entering the lobby
+  const startBtn = document.getElementById("start-btn") as HTMLButtonElement | null;
+  if (startBtn) startBtn.disabled = false;
   renderSeats();
   showScreen("screen-lobby");
 }
@@ -533,6 +541,7 @@ async function startGame(): Promise<void> {
       playerCount: currentMode.playerCount,
     });
     currentGameId = room.gameId;
+    localStorage.setItem("ab_game_id", room.gameId);
     addLog(`게임 생성: ${room.gameId}`);
 
     const hasHuman = seatTypes.some((t) => t === "human");
@@ -1531,6 +1540,11 @@ function submitUnitOrder(orderedIds: string[]): void {
 document.getElementById("lobby-back")?.addEventListener("click", () => {
   stopPolling();
   ws.disconnect();
+  currentGameId = null;
+  localStorage.removeItem("ab_game_id");
+  // Re-enable the start button so a new game can be created next time
+  const startBtn = document.getElementById("start-btn") as HTMLButtonElement | null;
+  if (startBtn) startBtn.disabled = false;
   showScreen("screen-menu");
 });
 
@@ -1551,11 +1565,73 @@ document.getElementById("back-to-menu-btn")?.addEventListener("click", () => {
   stopPolling();
   ws.disconnect();
   currentGameId = null;
+  localStorage.removeItem("ab_game_id");
   logEntries = [];
   placedUnits = [];
   renderLog();
   document.getElementById("game-over-container")?.classList.add("hidden");
   showScreen("screen-menu");
 });
+
+// ─── Session restore on page load ─────────────────────────────────────────────
+
+async function tryRestoreSession(): Promise<void> {
+  const savedGameId = localStorage.getItem("ab_game_id");
+  if (!savedGameId) return;
+
+  const token = api.getToken();
+  // Re-authenticate with the persisted player ID to get a fresh token
+  try {
+    await api.login(humanPlayerId);
+  } catch {
+    localStorage.removeItem("ab_game_id");
+    return;
+  }
+
+  // Check if the game still exists and is active
+  try {
+    const res = await fetch(`${API_BASE}/api/v1/rooms/${savedGameId}`, {
+      headers: { Authorization: `Bearer ${api.getToken()}` },
+    });
+    if (!res.ok) {
+      localStorage.removeItem("ab_game_id");
+      return;
+    }
+    const data = (await res.json()) as { status: string; state: GameStateSnapshot };
+    if (data.status === "ended" || data.state?.phase === "result") {
+      localStorage.removeItem("ab_game_id");
+      return;
+    }
+
+    // Game is still active — restore
+    currentGameId = savedGameId;
+    const pState = data.state?.players?.[humanPlayerId];
+    if (pState !== undefined) humanTeamIndex = pState.teamIndex;
+
+    showScreen("screen-game");
+    if (data.state) {
+      lastGameState = data.state;
+      renderGame(data.state);
+    }
+
+    // Reconnect WS then start polling
+    ws.connect(WS_BASE, savedGameId, humanPlayerId, {
+      token: api.getToken() ?? "",
+      onJoined: () => { addLog("게임 재접속 완료"); },
+      onStateUpdate: (state) => {
+        lastGameState = state;
+        if (state.phase === "battle" || state.phase === "result") renderGame(state);
+      },
+      onGameEnd: (winnerIds, reason) => { showGameOver(winnerIds, reason); },
+      onUnitOrderRequest: (aliveUnitIds, timeoutMs) => { showUnitOrderDraft(aliveUnitIds, timeoutMs); },
+    });
+    pollGameState(savedGameId);
+    addLog(`세션 복원: ${savedGameId}`);
+  } catch {
+    localStorage.removeItem("ab_game_id");
+  }
+}
+
+void tryRestoreSession();
 
 renderMenu();

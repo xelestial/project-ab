@@ -305,11 +305,22 @@ export class MCTSAdapter implements IPlayerAdapter {
   // ─── 액션 후보 생성 ──────────────────────────────────────────────────────────
 
   private getCandidateActions(state: GameState): PlayerAction[] {
-    return this.getCandidateActionsForPlayer(state, this.playerId);
+    // Respect the current turn slot — only generate actions for the active unit.
+    // If slot.unitId is set and the action is for a different unit,
+    // isActionAllowed() will reject it, causing an infinite loop.
+    const slot = state.turnOrder[state.currentTurnIndex];
+    const activeUnitId = slot?.unitId;
+    return this.getCandidateActionsForPlayer(state, this.playerId, activeUnitId);
   }
 
-  private getCandidateActionsForPlayer(state: GameState, pid: string): PlayerAction[] {
-    const myUnits = getPlayerUnits(state, pid).filter((u) => u.alive);
+  private getCandidateActionsForPlayer(
+    state: GameState,
+    pid: string,
+    activeUnitId?: string,
+  ): PlayerAction[] {
+    const myUnits = getPlayerUnits(state, pid).filter(
+      (u) => u.alive && (activeUnitId === undefined || u.unitId === activeUnitId),
+    );
     const enemies = getAliveUnits(state).filter((u) => u.playerId !== pid);
     const actions: PlayerAction[] = [];
 
