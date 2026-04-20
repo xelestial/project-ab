@@ -835,16 +835,30 @@ async function submitPlacement(): Promise<void> {
 
 // ─── Polling ──────────────────────────────────────────────────────────────────
 
+let pollTimeout: ReturnType<typeof setTimeout> | null = null;
+
+function stopPolling(): void {
+  if (pollTimeout !== null) {
+    clearTimeout(pollTimeout);
+    pollTimeout = null;
+  }
+}
+
 async function pollGameState(gameId: string): Promise<void> {
   const token = api.getToken();
   if (!token) return;
+
+  stopPolling(); // cancel any in-flight poll from a previous game
 
   const poll = async (): Promise<void> => {
     try {
       const res = await fetch(`${API_BASE}/api/v1/rooms/${gameId}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (!res.ok) { setTimeout(() => void poll(), 2_000); return; }
+      if (!res.ok) {
+        pollTimeout = setTimeout(() => void poll(), 2_000);
+        return;
+      }
 
       const data = (await res.json()) as { status: string; state: GameStateSnapshot };
 
@@ -867,12 +881,12 @@ async function pollGameState(gameId: string): Promise<void> {
       if (data.status === "ended" || data.state?.phase === "result") {
         const winnerIds = data.state?.endResult?.winnerIds ?? [];
         showGameOver(winnerIds, data.state?.endResult?.result ?? "ended");
-        return;
+        return; // stop polling — game is over
       }
 
-      setTimeout(() => void poll(), 1_000);
+      pollTimeout = setTimeout(() => void poll(), 1_000);
     } catch {
-      setTimeout(() => void poll(), 2_000);
+      pollTimeout = setTimeout(() => void poll(), 2_000);
     }
   };
 
@@ -1362,6 +1376,9 @@ function renderLog(): void {
 }
 
 function showGameOver(winnerIds: string[], reason: string): void {
+  stopPolling(); // game is over — no more polling needed
+  ws.disconnect();
+
   const container = document.getElementById("game-over-container");
   const msg = document.getElementById("game-over-msg");
   if (!container || !msg) return;
@@ -1512,6 +1529,7 @@ function submitUnitOrder(orderedIds: string[]): void {
 // ─── Bootstrap ────────────────────────────────────────────────────────────────
 
 document.getElementById("lobby-back")?.addEventListener("click", () => {
+  stopPolling();
   ws.disconnect();
   showScreen("screen-menu");
 });
@@ -1530,6 +1548,7 @@ document.getElementById("pass-btn")?.addEventListener("click", () => {
 });
 
 document.getElementById("back-to-menu-btn")?.addEventListener("click", () => {
+  stopPolling();
   ws.disconnect();
   currentGameId = null;
   logEntries = [];

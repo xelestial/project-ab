@@ -51,6 +51,7 @@ export type UnitOrderRequestHandler = (aliveUnitIds: string[], timeoutMs: number
 
 export class WsClient {
   private ws: WebSocket | null = null;
+  private gameId: string | null = null;
   private onStateUpdate: StateUpdateHandler | null = null;
   private onGameEnd: GameEndHandler | null = null;
   private onJoined: (() => void) | null = null;
@@ -69,6 +70,7 @@ export class WsClient {
       token?: string;
     },
   ): void {
+    this.gameId = gameId;
     this.onJoined = handlers.onJoined ?? null;
     this.onStateUpdate = handlers.onStateUpdate ?? null;
     this.onGameEnd = handlers.onGameEnd ?? null;
@@ -117,8 +119,8 @@ export class WsClient {
     };
   }
 
-  sendAction(action: unknown): void {
-    this.send({ type: "action", action });
+  sendAction(gameId: string, action: unknown): void {
+    this.send({ type: "action", gameId, action });
   }
 
   sendUnitOrder(gameId: string, unitOrder: string[]): void {
@@ -133,6 +135,7 @@ export class WsClient {
     if (this.pingInterval !== null) clearInterval(this.pingInterval);
     this.ws?.close();
     this.ws = null;
+    this.gameId = null;
   }
 
   private send(data: unknown): void {
