@@ -125,6 +125,10 @@ export class WsClient {
     this.send({ type: "unit_order", gameId, unitOrder });
   }
 
+  get connected(): boolean {
+    return this.ws?.readyState === WebSocket.OPEN;
+  }
+
   disconnect(): void {
     if (this.pingInterval !== null) clearInterval(this.pingInterval);
     this.ws?.close();

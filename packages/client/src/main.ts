@@ -88,6 +88,11 @@ const UNIT_COLOR: Record<string, string> = {
   mage: "#9b5bd9", support: "#d9c05b",
 };
 
+const UNIT_EMOJI: Record<string, string> = {
+  t1: "🛡️", f1: "⚔️", r1: "🏹",
+  m1: "🔮", k1: "⚔️", s1: "💚",
+};
+
 // ─── Isometric Renderer ───────────────────────────────────────────────────────
 
 const TILE_COLORS: Record<string, string> = {
@@ -1402,19 +1407,14 @@ function showUnitOrderDraft(aliveUnitIds: string[], timeoutMs: number): void {
       item.dataset["uid"] = uid;
       item.draggable = true;
 
-      // Unit display info
-      const metaId = unit.metaId.replace("unit_", "");
-      const classMap: Record<string, string> = {
-        fighter: "전사", tank: "탱커", ranger: "레인저",
-        mage: "마법사", healer: "힐러", assassin: "암살자",
-      };
-      const className = Object.keys(classMap).find(k => metaId.includes(k));
-      const unitClass = className ? classMap[className] : metaId;
+      // Unit display info — use the shared UNIT_NAME_KO / UNIT_ABBR maps
+      const metaId = unit.metaId as string;
+      const unitName = UNIT_NAME_KO[metaId] ?? UNIT_ABBR[metaId] ?? metaId;
 
       item.innerHTML = `
         <span class="unit-order-num">${idx + 1}</span>
-        <span class="unit-order-icon">${getUnitEmoji(unit.metaId)}</span>
-        <span class="unit-order-name">${unitClass ?? metaId}</span>
+        <span class="unit-order-icon">${getUnitEmoji(metaId)}</span>
+        <span class="unit-order-name">${unitName}</span>
         <span class="unit-order-hp">HP ${unit.currentHealth}</span>
         <span class="unit-order-drag">⠿</span>
       `;
@@ -1472,11 +1472,14 @@ function showUnitOrderDraft(aliveUnitIds: string[], timeoutMs: number): void {
 }
 
 function getUnitEmoji(metaId: string): string {
-  if (metaId.includes("fighter")) return "⚔️";
+  // Direct metaId lookup first
+  if (UNIT_EMOJI[metaId]) return UNIT_EMOJI[metaId]!;
+  // Fallback: class-name substring match (future unit types)
+  if (metaId.includes("fighter") || metaId.includes("knight")) return "⚔️";
   if (metaId.includes("tank")) return "🛡️";
   if (metaId.includes("ranger")) return "🏹";
   if (metaId.includes("mage")) return "🔮";
-  if (metaId.includes("healer")) return "💚";
+  if (metaId.includes("support") || metaId.includes("healer")) return "💚";
   if (metaId.includes("assassin")) return "🗡️";
   return "🧙";
 }
@@ -1489,8 +1492,20 @@ function submitUnitOrder(orderedIds: string[]): void {
   const overlay = document.getElementById("unit-order-overlay");
   overlay?.classList.add("hidden");
 
-  if (currentGameId) {
+  if (!currentGameId) return;
+
+  if (ws.connected) {
     ws.sendUnitOrder(currentGameId, orderedIds);
+  } else {
+    // REST fallback when WS is not connected
+    const token = api.getToken();
+    if (token) {
+      fetch(`${API_BASE}/api/v1/rooms/${currentGameId}/unit-order`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ playerId: humanPlayerId, unitOrder: orderedIds }),
+      }).catch(() => { /* ignore — auto-timeout will handle it */ });
+    }
   }
 }
 
