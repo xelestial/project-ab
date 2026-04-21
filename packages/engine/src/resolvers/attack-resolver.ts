@@ -3,15 +3,19 @@
  *
  * 3-phase separation (no hardcoding):
  *
+ *   Phase 0 — PRE-ATTACK MOVEMENT (rush / adjacent tile absorb)
+ *     · Rush: attacker moves to adjacent of target before hitting (isRushMovement)
+ *     · Adjacent tile absorb (r1): absorb attribute from player-chosen sourceTile → plain
+ *
  *   Phase 1 — DAMAGE (공격 시)
  *     · Elemental reaction lookup (data-driven, elemental-reactions.json)
  *       — applies damage multiplier and removes effects from target
  *     · Attack damage (baseDamage × multiplier − armor)
  *     · Tile conversion at target position
  *
- *   Phase 2 — KNOCKBACK (타일 이동 시, 타의에 의한 이동)
- *     · Collision damage when blocked (data-driven removeConditions)
- *     · Tile transition effects at destination (via TileTransitionResolver)
+ *   Phase 2 — KNOCKBACK / PULL (타일 이동 시, 타의에 의한 이동)
+ *     · Knockback: target pushed away from attacker (collision damage, tile entry effects)
+ *     · Pull: target pulled adjacent to attacker (unit_pull)
  *
  *   Phase 3 — POST-CONVERSION TILE EFFECTS
  *     · After tile converts, any unit still standing on it receives
@@ -31,7 +35,7 @@ import type {
   MetaId,
 } from "@ab/metadata";
 import type { IDataRegistry } from "@ab/metadata";
-import type { IAttackValidator } from "../validators/attack-validator.js";
+import type { IAttackValidator, AttackOptions } from "../validators/attack-validator.js";
 import type { ITileTransitionResolver } from "./tile-transition-resolver.js";
 import { KNOCKBACK_COLLISION_DAMAGE } from "@ab/metadata";
 import {
@@ -53,7 +57,7 @@ const TILE_TO_ATTACK_ATTR: Partial<Record<TileAttributeType, AttackAttribute>> =
 };
 
 export interface IAttackResolver {
-  resolve(attacker: UnitState, target: Position, state: GameState): GameChange[];
+  resolve(attacker: UnitState, target: Position, state: GameState, options?: AttackOptions): GameChange[];
 }
 
 export class AttackResolver implements IAttackResolver {
@@ -63,40 +67,88 @@ export class AttackResolver implements IAttackResolver {
     private readonly tileTransition: ITileTransitionResolver,
   ) {}
 
-  resolve(attacker: UnitState, target: Position, state: GameState): GameChange[] {
-    const validation = this.validator.validateAttack(attacker, target, state);
+  resolve(attacker: UnitState, target: Position, state: GameState, options?: AttackOptions): GameChange[] {
+    const validation = this.validator.validateAttack(attacker, target, state, options);
     if (!validation.valid || !validation.affectedPositions) return [];
 
     const changes: GameChange[] = [];
     const unitMeta = this.registry.getUnit(attacker.metaId);
-    const weapon = this.registry.getWeapon(unitMeta.primaryWeaponId);
+    const weaponId = options?.overrideWeaponId ?? unitMeta.primaryWeaponId;
+    const weapon = this.registry.getWeapon(weaponId);
+
+    // ── Phase 0a: Rush movement ────────────────────────────────────────────────
+    // If weapon has rush, attacker moves adjacent to target before hitting.
+    // Uses isRushMovement=true so the move action is NOT consumed.
+    let effectiveAttackerPos = attacker.position;
+    if (weapon.rush !== undefined) {
+      const adjacentPos = getAdjacentToTarget(attacker.position, target);
+      if (adjacentPos !== null && !posEqual(adjacentPos, attacker.position)) {
+        changes.push({
+          type: "unit_move",
+          unitId: attacker.unitId,
+          from: attacker.position,
+          to: adjacentPos,
+          isRushMovement: true,
+        });
+        // Tile-entry effects at rush destination for the attacker
+        const attrAtAdj = getTileAttribute(state, adjacentPos);
+        if (attrAtAdj !== "river") {
+          changes.push(...this.tileTransition.resolveUnitEntersTile(attacker, adjacentPos, attrAtAdj, state));
+        }
+        effectiveAttackerPos = adjacentPos;
+      }
+    }
+
+    // ── Phase 0b: Adjacent tile absorb (r1 — 관통+흡수) ─────────────────────
+    // Absorb the tile attribute from a player-chosen adjacent tile.
+    // The sourceTile reverts to plain; effective attack attribute = that tile's attr.
+    let effectiveAttr = weapon.attribute as AttackAttribute;
+    if (weapon.adjacentTileAbsorb && options?.sourceTile !== undefined) {
+      const st = options.sourceTile;
+      const sourceTileAttr = getTileAttribute(state, st);
+      const mapped = TILE_TO_ATTACK_ATTR[sourceTileAttr];
+      if (mapped !== undefined) {
+        effectiveAttr = mapped;
+        // Revert absorbed tile to plain
+        changes.push({
+          type: "tile_attribute_change",
+          position: st,
+          from: sourceTileAttr,
+          to: "plain",
+          causedBy: { attackerId: attacker.unitId as import("@ab/metadata").UnitId, attribute: mapped },
+        });
+      }
+    }
 
     // ── Tile absorption (skill_shield_defend) ─────────────────────────────────
     // T1 absorbs the attribute of the tile it's standing on:
     //   · Attacker's tile loses its attribute (becomes plain)
     //   · Attacker's own matching effect is removed (cleansed)
     //   · Effective attack attribute = absorbed tile attribute
-    const { attr: effectiveAttr, absorbed } = this.resolveEffectiveAttribute(
-      weapon, attacker, unitMeta, state,
-    );
-
-    if (absorbed) {
-      const attackerTileAttr = getTileAttribute(state, attacker.position);
-      changes.push({
-        type: "tile_attribute_change",
-        position: attacker.position,
-        from: attackerTileAttr,
-        to: "plain",
-        causedBy: { attackerId: attacker.unitId, attribute: effectiveAttr },
-      });
-      const matchingEffect = attacker.activeEffects.find((e) => e.effectType === effectiveAttr);
-      if (matchingEffect !== undefined) {
+    // Note: only applies when weapon.adjacentTileAbsorb is NOT used.
+    if (!weapon.adjacentTileAbsorb) {
+      const { attr: shieldAttr, absorbed } = this.resolveEffectiveAttribute(
+        weapon, attacker, unitMeta, state,
+      );
+      if (absorbed) {
+        effectiveAttr = shieldAttr;
+        const attackerTileAttr = getTileAttribute(state, attacker.position);
         changes.push({
-          type: "unit_effect_remove",
-          unitId: attacker.unitId,
-          effectId: matchingEffect.effectId,
-          effectType: matchingEffect.effectType,
+          type: "tile_attribute_change",
+          position: attacker.position,
+          from: attackerTileAttr,
+          to: "plain",
+          causedBy: { attackerId: attacker.unitId, attribute: effectiveAttr },
         });
+        const matchingEffect = attacker.activeEffects.find((e) => e.effectType === effectiveAttr);
+        if (matchingEffect !== undefined) {
+          changes.push({
+            type: "unit_effect_remove",
+            unitId: attacker.unitId,
+            effectId: matchingEffect.effectId,
+            effectType: matchingEffect.effectType,
+          });
+        }
       }
     }
 
@@ -125,11 +177,11 @@ export class AttackResolver implements IAttackResolver {
         }
       }
 
-      // ── Phase 2: KNOCKBACK (타일 이동 시) ──────────────────────────────────
+      // ── Phase 2a: KNOCKBACK (타일 이동 시) ─────────────────────────────────
       // Includes: collision damage (data-driven), tile transition at destination
       let knockbackDestPos: Position | null = null; // null = unit did not move
       if (hitUnit !== undefined && weapon.knockback !== undefined && affected.isPrimary) {
-        const kbChanges = this.resolveKnockback(weapon, attacker.position, hitUnit, state);
+        const kbChanges = this.resolveKnockback(weapon, effectiveAttackerPos, hitUnit, state);
         changes.push(...kbChanges);
 
         // Determine where the unit ended up (for Phase 3)
@@ -147,6 +199,28 @@ export class AttackResolver implements IAttackResolver {
         // otherwise unit stayed at pos (blocked or no knockback)
       }
 
+      // ── Phase 2b: PULL ────────────────────────────────────────────────────
+      // Pull weapon: target is moved adjacent to attacker (unit_pull)
+      if (hitUnit !== undefined && weapon.pull !== undefined && affected.isPrimary) {
+        const pullDest = getAdjacentToTarget(hitUnit.position, effectiveAttackerPos);
+        if (pullDest !== null && !posEqual(pullDest, hitUnit.position)) {
+          // Only pull if destination is empty and in-bounds
+          if (isInBounds(pullDest, state.map.gridSize) && getUnitAt(state, pullDest) === undefined) {
+            changes.push({
+              type: "unit_pull",
+              unitId: hitUnit.unitId,
+              from: hitUnit.position,
+              to: pullDest,
+            });
+            // Tile entry effects at pull destination
+            const attrAtPullDest = getTileAttribute(state, pullDest);
+            if (attrAtPullDest !== "river") {
+              changes.push(...this.tileTransition.resolveUnitEntersTile(hitUnit, pullDest, attrAtPullDest, state));
+            }
+          }
+        }
+      }
+
       // ── Phase 3: TILE CONVERSION + POST-CONVERSION EFFECTS ────────────────
       if (effectiveAttr !== "none") {
         // Convert the target tile
@@ -157,7 +231,7 @@ export class AttackResolver implements IAttackResolver {
         // If it stayed (pos), it now stands on the new tile type → get tile effects.
         if (hitUnit !== undefined && knockbackDestPos === null) {
           // Unit still at pos — tile just changed under it
-          changes.push(...this.tileTransition.resolveUnitEntersTile(hitUnit, effectiveAttr as TileAttributeType, state));
+          changes.push(...this.tileTransition.resolveUnitEntersTile(hitUnit, pos, effectiveAttr as TileAttributeType, state));
         }
         // If the unit moved to another tile via knockback, tile effects there are
         // already applied by resolveKnockback → tileTransition.resolveUnitEntersTile().
@@ -204,7 +278,7 @@ export class AttackResolver implements IAttackResolver {
     return { multiplier, reactionChanges };
   }
 
-  // ── Tile absorption ────────────────────────────────────────────────────────
+  // ── Tile absorption (shield_defend) ───────────────────────────────────────
 
   private resolveEffectiveAttribute(
     weapon: WeaponMeta,
@@ -317,7 +391,7 @@ export class AttackResolver implements IAttackResolver {
         blockedBy: undefined,
       });
       // Apply tile-entry effects at destination
-      changes.push(...this.tileTransition.resolveUnitEntersTile(target, attr, state));
+      changes.push(...this.tileTransition.resolveUnitEntersTile(target, newPos, attr, state));
     }
 
     return changes;
@@ -366,4 +440,21 @@ function calcDamage(
   }
 
   return dmg;
+}
+
+function posEqual(a: Position, b: Position): boolean {
+  return a.row === b.row && a.col === b.col;
+}
+
+/**
+ * Returns the position adjacent to `to` in the direction `from → to`.
+ * E.g., from=(0,0), to=(0,3) → (0,2): the tile just before the target.
+ * Used for rush (attacker lands adjacent to target) and pull (target lands adjacent to attacker).
+ */
+function getAdjacentToTarget(from: Position, to: Position): Position | null {
+  const delta = directionDelta(from, to);
+  if (delta === null) return null;
+  const adj = { row: to.row - delta.dRow, col: to.col - delta.dCol };
+  // If adjacent == from, the attacker is already adjacent — no movement needed
+  return adj;
 }

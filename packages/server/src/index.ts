@@ -46,6 +46,7 @@ function loadRegistry(): DataRegistry {
     const effects            = require("../../metadata/data/effects.json")                      as unknown[];
     const tiles              = require("../../metadata/data/tiles.json")                        as unknown[];
     const elementalReactions = require("../../metadata/data/elemental-reactions.json")          as unknown[];
+    const unitPassives       = require("../../metadata/data/unit-passives.json")                as unknown[];
     const map01              = require("../../metadata/data/maps/test-map-01.json")             as unknown;
     const map1v1_6v6         = require("../../metadata/data/maps/map-1v1-6v6.json")             as unknown;
     const map2v2_6v6         = require("../../metadata/data/maps/map-2v2-6v6.json")             as unknown;
@@ -56,6 +57,7 @@ function loadRegistry(): DataRegistry {
     reg.loadEffects(effects);
     reg.loadTiles(tiles);
     reg.loadElementalReactions(elementalReactions);
+    reg.loadUnitPassives(unitPassives);
     reg.loadMaps([map01, map1v1_6v6, map2v2_6v6]);
   } catch (e) {
     console.warn("Metadata JSON load failed (expected during unit tests):", e);

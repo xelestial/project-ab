@@ -18,6 +18,8 @@ export const MoveActionSchema = BaseActionSchema.extend({
 export const AttackActionSchema = BaseActionSchema.extend({
   type: z.literal("attack"),
   target: PositionSchema,
+  /** For r1 adjacent tile absorb — the tile to absorb attribute from */
+  sourceTile: PositionSchema.optional(),
 });
 
 export const SkillActionSchema = BaseActionSchema.extend({

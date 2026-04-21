@@ -42,7 +42,7 @@ export type RangeType = z.infer<typeof RangeTypeSchema>;
 export const AttackAttributeSchema = z.enum(["fire", "water", "acid", "electric", "ice", "sand", "none"]);
 export type AttackAttribute = z.infer<typeof AttackAttributeSchema>;
 
-export const UnitClassSchema = z.enum(["tanker", "fighter", "ranger", "mage", "support"]);
+export const UnitClassSchema = z.enum(["tanker", "fighter", "ranger", "mage", "support", "brute"]);
 export type UnitClass = z.infer<typeof UnitClassSchema>;
 
 /** Unit-based status effects */

@@ -27,6 +27,8 @@ export const UnitMoveChangeSchema = z.object({
   unitId: UnitIdSchema,
   from: PositionSchema,
   to: PositionSchema,
+  /** If true, this is a rush movement — does NOT set actionsUsed.moved */
+  isRushMovement: z.boolean().optional(),
 });
 
 export const UnitDamageChangeSchema = z.object({
@@ -92,6 +94,14 @@ export const UnitRiverExitChangeSchema = z.object({
   position: PositionSchema,
 });
 
+export const UnitPullChangeSchema = z.object({
+  type: z.literal("unit_pull"),
+  unitId: UnitIdSchema,
+  from: PositionSchema,
+  to: PositionSchema,
+});
+export type UnitPullChange = z.infer<typeof UnitPullChangeSchema>;
+
 export const UnitActionsResetChangeSchema = z.object({
   type: z.literal("unit_actions_reset"),
   unitId: UnitIdSchema,
@@ -143,6 +153,7 @@ export const GameChangeSchema = z.discriminatedUnion("type", [
   UnitKnockbackChangeSchema,
   UnitRiverEnterChangeSchema,
   UnitRiverExitChangeSchema,
+  UnitPullChangeSchema,
   UnitActionsResetChangeSchema,
   TileAttributeChangeSchema,
   TileEffectTickChangeSchema,

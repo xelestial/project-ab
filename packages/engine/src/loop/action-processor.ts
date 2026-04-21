@@ -124,12 +124,13 @@ export class ActionProcessor implements IActionProcessor {
       return { accepted: false, errorCode: ErrorCode.ATTACK_ALREADY_ATTACKED, newState: state };
     }
 
-    const validation = this.attackValidator.validateAttack(unit, action.target, state);
+    const attackOpts = action.sourceTile !== undefined ? { sourceTile: action.sourceTile } : undefined;
+    const validation = this.attackValidator.validateAttack(unit, action.target, state, attackOpts);
     if (!validation.valid) {
       return { accepted: false, errorCode: validation.errorCode, newState: state };
     }
 
-    const changes = this.attackResolver.resolve(unit, action.target, state);
+    const changes = this.attackResolver.resolve(unit, action.target, state, attackOpts);
     let newState = this.applicator.apply(changes, state);
 
     // Mark as attacked
@@ -169,12 +170,13 @@ export class ActionProcessor implements IActionProcessor {
 
     // Active skills use a weapon — resolve as attack
     if (skillMeta.type === "active" && skillMeta.weaponId !== undefined && action.target !== undefined) {
-      const validation = this.attackValidator.validateAttack(unit, action.target, state);
+      const skillOpts = { overrideWeaponId: skillMeta.weaponId as string };
+      const validation = this.attackValidator.validateAttack(unit, action.target, state, skillOpts);
       if (!validation.valid) {
         return { accepted: false, errorCode: validation.errorCode, newState: state };
       }
 
-      const changes = this.attackResolver.resolve(unit, action.target, state);
+      const changes = this.attackResolver.resolve(unit, action.target, state, skillOpts);
       let newState = this.applicator.apply(changes, state);
 
       // Mark skill used + attacked

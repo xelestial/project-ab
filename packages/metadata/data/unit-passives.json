@@ -1,0 +1,23 @@
+[
+  { "id": "passive_b1_fire_heal",
+    "nameKey": "passive.b1_fire_heal.name", "descKey": "passive.b1_fire_heal.desc",
+    "trigger": { "type": "on_tile_entry_of", "tileAttribute": "fire" },
+    "actions": [
+      { "type": "convert_entered_tile", "to": "plain" },
+      { "type": "heal_self", "amount": 1 }
+    ] },
+  { "id": "passive_b2_tile_immunity",
+    "nameKey": "passive.b2_tile_immunity.name", "descKey": "passive.b2_tile_immunity.desc",
+    "trigger": { "type": "always_on" },
+    "actions": [
+      { "type": "immune_tile_effects" },
+      { "type": "immune_tile_damage" },
+      { "type": "immune_elemental_effects" }
+    ] },
+  { "id": "passive_b2_tile_spread",
+    "nameKey": "passive.b2_tile_spread.name", "descKey": "passive.b2_tile_spread.desc",
+    "trigger": { "type": "on_tile_entry_any_attribute" },
+    "actions": [
+      { "type": "spread_entered_tile_attr" }
+    ] }
+]

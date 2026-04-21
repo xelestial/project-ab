@@ -65,17 +65,32 @@ export class EffectResolver implements IEffectResolver {
     }
 
     // 3. Tile periodic damage (standing on fire/acid/electric tile)
-    const tileAttr = getTileAttribute(state, unit.position);
-    const tileMeta = this.registry.getTileByType(tileAttr);
-    if (tileMeta !== undefined && tileMeta.damagePerTurn > 0) {
-      const hpAfter = Math.max(0, unit.currentHealth - tileMeta.damagePerTurn);
-      changes.push({
-        type: "unit_damage",
-        unitId: unit.unitId,
-        amount: tileMeta.damagePerTurn,
-        source: { type: "tile", tileAttribute: tileAttr },
-        hpAfter,
-      });
+    // Skip if unit has always_on immune_tile_damage passive (e.g. b2)
+    const passives = this.registry.getUnitPassives(unit.metaId);
+    let immuneTileDamage = false;
+    for (const passive of passives) {
+      if (passive.trigger.type === "always_on") {
+        for (const action of passive.actions) {
+          if (action.type === "immune_tile_damage") {
+            immuneTileDamage = true;
+          }
+        }
+      }
+    }
+
+    if (!immuneTileDamage) {
+      const tileAttr = getTileAttribute(state, unit.position);
+      const tileMeta = this.registry.getTileByType(tileAttr);
+      if (tileMeta !== undefined && tileMeta.damagePerTurn > 0) {
+        const hpAfter = Math.max(0, unit.currentHealth - tileMeta.damagePerTurn);
+        changes.push({
+          type: "unit_damage",
+          unitId: unit.unitId,
+          amount: tileMeta.damagePerTurn,
+          source: { type: "tile", tileAttribute: tileAttr },
+          hpAfter,
+        });
+      }
     }
 
     return changes;

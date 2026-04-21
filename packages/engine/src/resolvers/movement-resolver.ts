@@ -43,7 +43,7 @@ export class MovementResolver implements IMovementResolver {
         });
 
         // ── Tile transition (타일 이동 시 → 지형 효과 획득/손실) ──────────────
-        changes.push(...this.tileTransition.resolveUnitEntersTile(unit, attr, state));
+        changes.push(...this.tileTransition.resolveUnitEntersTile(unit, pos, attr, state));
       }
     }
 

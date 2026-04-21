@@ -6,6 +6,7 @@ import type {
   TileAttributeMeta,
   MapMeta,
   ElementalReaction,
+  UnitPassiveMeta,
 } from "./schemas/metadata.js";
 import {
   UnitMetaSchema,
@@ -15,6 +16,7 @@ import {
   TileAttributeMetaSchema,
   MapMetaSchema,
   ElementalReactionSchema,
+  UnitPassiveMetaSchema,
 } from "./schemas/metadata.js";
 import { ErrorCode } from "./error-codes.js";
 import { getText } from "./i18n.js";
@@ -39,6 +41,9 @@ export interface IDataRegistry {
   getEffectByType(effectType: string): EffectMeta | undefined;
   getTileByType(tileType: string): TileAttributeMeta | undefined;
   getElementalReactions(): readonly ElementalReaction[];
+
+  getUnitPassive(id: string): UnitPassiveMeta;
+  getUnitPassives(unitMetaId: string): readonly UnitPassiveMeta[];
 }
 
 // ─── RegistryError ────────────────────────────────────────────────────────────
@@ -64,6 +69,7 @@ export class DataRegistry implements IDataRegistry {
   private readonly tiles = new Map<string, TileAttributeMeta>();
   private readonly maps = new Map<string, MapMeta>();
   private readonly elementalReactions: ElementalReaction[] = [];
+  private readonly unitPassives = new Map<string, UnitPassiveMeta>();
 
   // ── Loading ────────────────────────────────────────────────────────────────
 
@@ -116,6 +122,13 @@ export class DataRegistry implements IDataRegistry {
     }
   }
 
+  loadUnitPassives(raw: unknown[]): void {
+    for (const item of raw) {
+      const parsed = UnitPassiveMetaSchema.parse(item);
+      this.unitPassives.set(parsed.id, parsed);
+    }
+  }
+
   // ── Lookup ─────────────────────────────────────────────────────────────────
 
   getUnit(id: string): UnitMeta {
@@ -164,6 +177,26 @@ export class DataRegistry implements IDataRegistry {
       throw new RegistryError(ErrorCode.UNKNOWN_MAP, id, "MapMeta");
     }
     return v;
+  }
+
+  getUnitPassive(id: string): UnitPassiveMeta {
+    const v = this.unitPassives.get(id);
+    if (v === undefined) {
+      throw new RegistryError(ErrorCode.UNKNOWN_UNIT, id, "UnitPassiveMeta");
+    }
+    return v;
+  }
+
+  getUnitPassives(unitMetaId: string): readonly UnitPassiveMeta[] {
+    const unitMeta = this.units.get(unitMetaId);
+    if (unitMeta === undefined) return [];
+    return unitMeta.passiveIds.map((pid) => {
+      const p = this.unitPassives.get(pid);
+      if (p === undefined) {
+        throw new RegistryError(ErrorCode.UNKNOWN_UNIT, pid, "UnitPassiveMeta");
+      }
+      return p;
+    });
   }
 
   // ── Collection getters ──────────────────────────────────────────────────────
@@ -237,6 +270,7 @@ export function buildDataRegistry(data: {
   tiles: unknown[];
   maps: unknown[];
   elementalReactions?: unknown[];
+  unitPassives?: unknown[];
 }): DataRegistry {
   const reg = new DataRegistry();
   reg.loadWeapons(data.weapons);
@@ -247,6 +281,9 @@ export function buildDataRegistry(data: {
   reg.loadMaps(data.maps);
   if (data.elementalReactions !== undefined) {
     reg.loadElementalReactions(data.elementalReactions);
+  }
+  if (data.unitPassives !== undefined) {
+    reg.loadUnitPassives(data.unitPassives);
   }
   return reg;
 }

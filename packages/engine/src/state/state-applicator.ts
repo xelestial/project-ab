@@ -51,6 +51,8 @@ function applyOne(change: GameChange, state: GameState): GameState {
       return applyUnitRiverEnter(change, state);
     case "unit_river_exit":
       return applyUnitRiverExit(change, state);
+    case "unit_pull":
+      return applyUnitPull(change, state);
     case "unit_actions_reset":
       return applyUnitActionsReset(change, state);
     case "tile_attribute_change":
@@ -110,9 +112,15 @@ function posKeyToPos(key: string): { row: number; col: number } {
 // ─── Change implementations ───────────────────────────────────────────────────
 
 function applyUnitMove(change: Extract<GameChange, { type: "unit_move" }>, state: GameState): GameState {
+  const currentActions = state.units[change.unitId]?.actionsUsed;
+  if (currentActions === undefined) return state;
+  // Rush movement does NOT set moved:true (the unit's move action is still available)
+  const newActions = change.isRushMovement
+    ? currentActions
+    : { ...currentActions, moved: true };
   return updateUnit(state, change.unitId, {
     position: change.to,
-    actionsUsed: { ...state.units[change.unitId]!.actionsUsed, moved: true },
+    actionsUsed: newActions,
   });
 }
 
@@ -189,6 +197,13 @@ function applyUnitRiverExit(
   state: GameState,
 ): GameState {
   return updateUnit(state, change.unitId, { position: change.position });
+}
+
+function applyUnitPull(
+  change: Extract<GameChange, { type: "unit_pull" }>,
+  state: GameState,
+): GameState {
+  return updateUnit(state, change.unitId, { position: change.to });
 }
 
 function applyUnitActionsReset(

@@ -19,6 +19,9 @@ export const ErrorCode = {
   ATTACK_ALREADY_ATTACKED: "error.attack.already_attacked",
   ATTACK_FROZEN: "error.attack.frozen",
   ATTACK_INVALID_TARGET: "error.attack.invalid_target",
+  ATTACK_RUSH_BLOCKED: "error.attack.rush_blocked",
+  ATTACK_PULL_BLOCKED: "error.attack.pull_blocked",
+  ATTACK_CLEAR_PATH_REQUIRED: "error.attack.clear_path_required",
 
   // Skill
   SKILL_NOT_FOUND: "error.skill.not_found",

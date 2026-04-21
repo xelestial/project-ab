@@ -27,11 +27,18 @@ export interface AttackValidation {
   affectedPositions?: AffectedPosition[];
 }
 
+export interface AttackOptions {
+  /** Override the unit's primaryWeaponId (used for active skills with custom weapon) */
+  overrideWeaponId?: string;
+  /** Tile to absorb attribute from (for weapons with adjacentTileAbsorb) */
+  sourceTile?: Position;
+}
+
 // ─── Interface ────────────────────────────────────────────────────────────────
 
 export interface IAttackValidator {
-  validateAttack(unit: UnitState, target: Position, state: GameState): AttackValidation;
-  getAttackableTargets(unit: UnitState, state: GameState): Position[];
+  validateAttack(unit: UnitState, target: Position, state: GameState, options?: AttackOptions): AttackValidation;
+  getAttackableTargets(unit: UnitState, state: GameState, options?: AttackOptions): Position[];
 }
 
 // ─── Implementation ───────────────────────────────────────────────────────────
@@ -39,7 +46,7 @@ export interface IAttackValidator {
 export class AttackValidator implements IAttackValidator {
   constructor(private readonly registry: IDataRegistry) {}
 
-  validateAttack(unit: UnitState, target: Position, state: GameState): AttackValidation {
+  validateAttack(unit: UnitState, target: Position, state: GameState, options?: AttackOptions): AttackValidation {
     // 1. Frozen
     if (isFrozen(unit)) {
       return { valid: false, errorCode: ErrorCode.ATTACK_FROZEN };
@@ -56,7 +63,8 @@ export class AttackValidator implements IAttackValidator {
     }
 
     const unitMeta = this.registry.getUnit(unit.metaId);
-    const weapon = this.registry.getWeapon(unitMeta.primaryWeaponId);
+    const weaponId = options?.overrideWeaponId ?? unitMeta.primaryWeaponId;
+    const weapon = this.registry.getWeapon(weaponId);
 
     // 4. Range check — orthogonal straight lines only (no diagonal attacks)
     const dist = orthogonalDist(unit.position, target);
@@ -64,21 +72,29 @@ export class AttackValidator implements IAttackValidator {
       return { valid: false, errorCode: ErrorCode.ATTACK_OUT_OF_RANGE };
     }
 
-    // 5. Attack-type specific checks
+    // 5. Clear-path check (for rush and pull weapons)
+    if (weapon.rush?.requiresClearPath === true || weapon.requiresClearPath === true) {
+      if (!hasClearPath(unit.position, target, state)) {
+        return { valid: false, errorCode: ErrorCode.ATTACK_NO_LOS };
+      }
+    }
+
+    // 6. Attack-type specific checks
     const typeCheck = this.checkAttackType(weapon, unit, target, state);
     if (!typeCheck.valid) return typeCheck;
 
-    // 6. Calculate affected positions
+    // 7. Calculate affected positions
     const affected = this.calcAffectedPositions(weapon, unit.position, target, state);
 
     return { valid: true, affectedPositions: affected };
   }
 
-  getAttackableTargets(unit: UnitState, state: GameState): Position[] {
+  getAttackableTargets(unit: UnitState, state: GameState, options?: AttackOptions): Position[] {
     if (isFrozen(unit) || unit.actionsUsed.attacked) return [];
 
     const unitMeta = this.registry.getUnit(unit.metaId);
-    const weapon = this.registry.getWeapon(unitMeta.primaryWeaponId);
+    const weaponId = options?.overrideWeaponId ?? unitMeta.primaryWeaponId;
+    const weapon = this.registry.getWeapon(weaponId);
     const targets: Position[] = [];
     const gs = state.map.gridSize;
 
@@ -242,4 +258,18 @@ function posEqual(a: Position, b: Position): boolean {
 function unitHasShield(unit: UnitState, registry: IDataRegistry): boolean {
   const meta = registry.getUnit(unit.metaId);
   return meta.skillIds.includes("skill_shield_defend" as MetaId);
+}
+
+/**
+ * Check that no units or mountains exist between `from` and `target` (exclusive of both endpoints).
+ */
+function hasClearPath(from: Position, target: Position, state: GameState): boolean {
+  const line = linePositions(from, target, state.map.gridSize);
+  // line includes target but not from; check everything except the target itself
+  const between = line.slice(0, -1);
+  for (const pos of between) {
+    if (getUnitAt(state, pos) !== undefined) return false;
+    if (getTileAttribute(state, pos) === "mountain") return false;
+  }
+  return true;
 }

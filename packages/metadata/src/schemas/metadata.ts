@@ -55,6 +55,14 @@ export const WeaponMetaSchema = z.object({
   penetrating: z.boolean().default(false),
   /** Can this attack arc over mountains? (artillery) */
   arcing: z.boolean().default(false),
+  /** Rush attack: attacker moves to adjacent of target during attack */
+  rush: z.object({ requiresClearPath: z.boolean().default(true) }).optional(),
+  /** Pull attack: target is pulled to adjacent of attacker */
+  pull: z.object({ landAdjacent: z.boolean().default(true) }).optional(),
+  /** Adjacent tile absorb: attacker can absorb adjacent tile attribute for attack */
+  adjacentTileAbsorb: z.boolean().default(false),
+  /** Requires clear straight-line path (no units or mountains between) */
+  requiresClearPath: z.boolean().default(false),
 });
 export type WeaponMeta = z.infer<typeof WeaponMetaSchema>;
 
@@ -94,6 +102,7 @@ export const UnitMetaSchema = z.object({
   attributes: z.array(AttackAttributeSchema).default([]),
   primaryWeaponId: MetaIdSchema,
   skillIds: z.array(MetaIdSchema).default([]),
+  passiveIds: z.array(MetaIdSchema).default([]),
   /** Asset sprite path key */
   spriteKey: z.string(),
 });
@@ -167,6 +176,34 @@ export const TileAttributeMetaSchema = z.object({
   damagePerTurn: z.number().int().min(0).default(0),
 });
 export type TileAttributeMeta = z.infer<typeof TileAttributeMetaSchema>;
+
+// ─── UnitPassiveMeta ──────────────────────────────────────────────────────────
+
+export const PassiveTriggerSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("on_tile_entry_of"), tileAttribute: TileAttributeTypeSchema }),
+  z.object({ type: z.literal("on_tile_entry_any_attribute") }),
+  z.object({ type: z.literal("always_on") }),
+]);
+export type PassiveTrigger = z.infer<typeof PassiveTriggerSchema>;
+
+export const PassiveActionSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("heal_self"), amount: z.number().int().min(1) }),
+  z.object({ type: z.literal("convert_entered_tile"), to: TileAttributeTypeSchema }),
+  z.object({ type: z.literal("spread_entered_tile_attr") }),
+  z.object({ type: z.literal("immune_tile_effects") }),
+  z.object({ type: z.literal("immune_tile_damage") }),
+  z.object({ type: z.literal("immune_elemental_effects") }),
+]);
+export type PassiveAction = z.infer<typeof PassiveActionSchema>;
+
+export const UnitPassiveMetaSchema = z.object({
+  id: MetaIdSchema,
+  nameKey: z.string(),
+  descKey: z.string(),
+  trigger: PassiveTriggerSchema,
+  actions: z.array(PassiveActionSchema),
+});
+export type UnitPassiveMeta = z.infer<typeof UnitPassiveMetaSchema>;
 
 // ─── ElementalReaction ────────────────────────────────────────────────────────
 
