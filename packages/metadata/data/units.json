@@ -63,7 +63,7 @@
     "faction": "a",
     "baseMovement": 2,
     "baseHealth": 5,
-    "baseArmor": 2,
+    "baseArmor": 1,
     "attributes": [],
     "primaryWeaponId": "wpn_knight_basic",
     "skillIds": ["skill_knight_taunt"],
