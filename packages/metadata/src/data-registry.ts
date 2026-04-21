@@ -5,6 +5,7 @@ import type {
   EffectMeta,
   TileAttributeMeta,
   MapMeta,
+  ElementalReaction,
 } from "./schemas/metadata.js";
 import {
   UnitMetaSchema,
@@ -13,6 +14,7 @@ import {
   EffectMetaSchema,
   TileAttributeMetaSchema,
   MapMetaSchema,
+  ElementalReactionSchema,
 } from "./schemas/metadata.js";
 import { ErrorCode } from "./error-codes.js";
 import { getText } from "./i18n.js";
@@ -36,6 +38,7 @@ export interface IDataRegistry {
 
   getEffectByType(effectType: string): EffectMeta | undefined;
   getTileByType(tileType: string): TileAttributeMeta | undefined;
+  getElementalReactions(): readonly ElementalReaction[];
 }
 
 // ─── RegistryError ────────────────────────────────────────────────────────────
@@ -60,6 +63,7 @@ export class DataRegistry implements IDataRegistry {
   private readonly effects = new Map<string, EffectMeta>();
   private readonly tiles = new Map<string, TileAttributeMeta>();
   private readonly maps = new Map<string, MapMeta>();
+  private readonly elementalReactions: ElementalReaction[] = [];
 
   // ── Loading ────────────────────────────────────────────────────────────────
 
@@ -102,6 +106,13 @@ export class DataRegistry implements IDataRegistry {
     for (const item of raw) {
       const parsed = MapMetaSchema.parse(item);
       this.maps.set(parsed.id, parsed);
+    }
+  }
+
+  loadElementalReactions(raw: unknown[]): void {
+    this.elementalReactions.length = 0;
+    for (const item of raw) {
+      this.elementalReactions.push(ElementalReactionSchema.parse(item));
     }
   }
 
@@ -202,6 +213,11 @@ export class DataRegistry implements IDataRegistry {
     return undefined;
   }
 
+  /** All elemental attack-vs-effect reaction rules */
+  getElementalReactions(): readonly ElementalReaction[] {
+    return this.elementalReactions;
+  }
+
   getText(key: string): string {
     return getText(key);
   }
@@ -220,6 +236,7 @@ export function buildDataRegistry(data: {
   effects: unknown[];
   tiles: unknown[];
   maps: unknown[];
+  elementalReactions?: unknown[];
 }): DataRegistry {
   const reg = new DataRegistry();
   reg.loadWeapons(data.weapons);
@@ -228,5 +245,8 @@ export function buildDataRegistry(data: {
   reg.loadTiles(data.tiles);
   reg.loadUnits(data.units);
   reg.loadMaps(data.maps);
+  if (data.elementalReactions !== undefined) {
+    reg.loadElementalReactions(data.elementalReactions);
+  }
   return reg;
 }

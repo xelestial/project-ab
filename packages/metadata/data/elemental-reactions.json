@@ -1,0 +1,20 @@
+[
+  {
+    "attackAttr": "fire",
+    "targetEffect": "freeze",
+    "damageMultiplier": 0,
+    "removedEffects": ["freeze"]
+  },
+  {
+    "attackAttr": "water",
+    "targetEffect": "fire",
+    "damageMultiplier": 1,
+    "removedEffects": ["fire"]
+  },
+  {
+    "attackAttr": "ice",
+    "targetEffect": "fire",
+    "damageMultiplier": 0,
+    "removedEffects": ["fire"]
+  }
+]

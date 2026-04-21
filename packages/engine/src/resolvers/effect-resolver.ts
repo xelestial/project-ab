@@ -88,8 +88,9 @@ export class EffectResolver implements IEffectResolver {
     const meta = this.registry.getEffect(effectId);
     const changes: GameChange[] = [];
 
-    // Freeze: clear all existing effects first
-    if (meta.effectType === "freeze") {
+    // Data-driven: clear all existing effects if the effect meta says so
+    // (e.g. freeze has clearsAllEffectsOnApply: true)
+    if (meta.clearsAllEffectsOnApply) {
       for (const e of unit.activeEffects) {
         changes.push({
           type: "unit_effect_remove",

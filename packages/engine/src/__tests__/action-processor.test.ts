@@ -17,15 +17,16 @@ import { TileManager } from "../managers/tile-manager.js";
 import { TileResolver } from "../resolvers/tile-resolver.js";
 import { TileValidator } from "../validators/tile-validator.js";
 import { EffectValidator } from "../validators/effect-validator.js";
-import { TestStateBuilder, makeRegistry } from "./test-helpers.js";
+import { TestStateBuilder, makeRegistry, makeTileTransitionResolver } from "./test-helpers.js";
 
 function makeProcessor() {
   const registry = makeRegistry();
+  const tileTransition = makeTileTransitionResolver(registry);
   const applicator = new StateApplicator();
   const mvValidator = new MovementValidator(registry);
   const atkValidator = new AttackValidator(registry);
-  const mvResolver = new MovementResolver(mvValidator, registry);
-  const atkResolver = new AttackResolver(atkValidator, registry);
+  const mvResolver = new MovementResolver(mvValidator, tileTransition);
+  const atkResolver = new AttackResolver(atkValidator, registry, tileTransition);
   const effValidator = new EffectValidator(registry);
   const effResolver = new EffectResolver(effValidator, registry);
   const tileValidator = new TileValidator(registry);

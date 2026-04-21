@@ -123,6 +123,11 @@ export const EffectMetaSchema = z.object({
   blocksAllActions: z.boolean().default(false),
   /** Whether this effect is also applied to the tile simultaneously */
   alsoAffectsTile: z.boolean().default(false),
+  /**
+   * When this effect is applied, clear all OTHER existing effects first.
+   * e.g. freeze wipes out fire/acid/etc before applying itself.
+   */
+  clearsAllEffectsOnApply: z.boolean().default(false),
   removeConditions: z.array(RemoveConditionSchema),
 });
 export type EffectMeta = z.infer<typeof EffectMetaSchema>;
@@ -146,12 +151,40 @@ export const TileAttributeMetaSchema = z.object({
    */
   appliesEffectId: MetaIdSchema.optional(),
   /**
+   * Effect types removed from a unit when it enters this tile.
+   * e.g. water tile removes ["fire", "acid"].
+   */
+  removesEffectTypes: z.array(UnitEffectTypeSchema).default([]),
+  /**
+   * If true, ALL existing effects are removed before appliesEffectId is applied.
+   * e.g. ice tile clears fire/acid/etc then applies freeze.
+   */
+  clearsAllEffects: z.boolean().default(false),
+  /**
    * If this tile type deals periodic damage to standing units
    * (e.g. fire tile = 2 dmg/turn)
    */
   damagePerTurn: z.number().int().min(0).default(0),
 });
 export type TileAttributeMeta = z.infer<typeof TileAttributeMetaSchema>;
+
+// ─── ElementalReaction ────────────────────────────────────────────────────────
+
+/**
+ * Defines how an attack attribute interacts with a target unit's current effect.
+ * Looked up at attack time; all matching reactions are applied.
+ */
+export const ElementalReactionSchema = z.object({
+  /** The attacking weapon/tile attribute */
+  attackAttr: AttackAttributeSchema,
+  /** The effect the target must currently have for this reaction to trigger */
+  targetEffect: UnitEffectTypeSchema,
+  /** Multiplier applied to the attack's base damage (0 = full block) */
+  damageMultiplier: z.number().min(0).max(2),
+  /** Effects removed from the target when this reaction fires */
+  removedEffects: z.array(UnitEffectTypeSchema),
+});
+export type ElementalReaction = z.infer<typeof ElementalReactionSchema>;
 
 // ─── MapMeta ──────────────────────────────────────────────────────────────────
 

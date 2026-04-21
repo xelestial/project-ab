@@ -10,6 +10,15 @@ import type {
   ActiveEffect,
 } from "@ab/metadata";
 import { buildDataRegistry, type DataRegistry } from "@ab/metadata";
+import { TileTransitionResolver } from "../resolvers/tile-transition-resolver.js";
+
+export { TileTransitionResolver };
+
+export const FIXTURE_ELEMENTAL_REACTIONS = [
+  { attackAttr: "fire",  targetEffect: "freeze", damageMultiplier: 0, removedEffects: ["freeze"] },
+  { attackAttr: "water", targetEffect: "fire",   damageMultiplier: 1, removedEffects: ["fire"]   },
+  { attackAttr: "ice",   targetEffect: "fire",   damageMultiplier: 0, removedEffects: ["fire"]   },
+];
 
 // ─── JSON fixtures (inline, no file I/O) ─────────────────────────────────────
 
@@ -149,6 +158,7 @@ export const FIXTURE_EFFECTS = [
     damagePerTurn: 0,
     blocksAllActions: true,
     alsoAffectsTile: false,
+    clearsAllEffectsOnApply: true,
     removeConditions: [
       { type: "turns", count: 1 },
       { type: "collision_with_frozen" },
@@ -264,6 +274,7 @@ export const FIXTURE_TILES = [
     cannotStop: false,
     impassable: false,
     damagePerTurn: 0,
+    removesEffectTypes: ["fire", "acid"],
   },
   {
     id: "tile_sand",
@@ -308,6 +319,7 @@ export const FIXTURE_TILES = [
     impassable: false,
     damagePerTurn: 0,
     appliesEffectId: "effect_freeze",
+    clearsAllEffects: true,
   },
 ];
 
@@ -333,7 +345,13 @@ export function makeRegistry(): DataRegistry {
     effects: FIXTURE_EFFECTS,
     tiles: FIXTURE_TILES,
     maps: FIXTURE_MAPS,
+    elementalReactions: FIXTURE_ELEMENTAL_REACTIONS,
   });
+}
+
+/** Convenience: create a TileTransitionResolver backed by the test registry. */
+export function makeTileTransitionResolver(registry: DataRegistry): TileTransitionResolver {
+  return new TileTransitionResolver(registry);
 }
 
 // ─── State builder ────────────────────────────────────────────────────────────

@@ -69,7 +69,8 @@
     "moveCost": 1,
     "cannotStop": false,
     "impassable": false,
-    "damagePerTurn": 0
+    "damagePerTurn": 0,
+    "removesEffectTypes": ["fire", "acid"]
   },
   {
     "id": "tile_acid",
@@ -102,6 +103,7 @@
     "cannotStop": false,
     "impassable": false,
     "damagePerTurn": 0,
-    "appliesEffectId": "effect_freeze"
+    "appliesEffectId": "effect_freeze",
+    "clearsAllEffects": true
   }
 ]

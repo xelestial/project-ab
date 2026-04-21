@@ -12,6 +12,7 @@ import type { IMovementResolver } from "../resolvers/movement-resolver.js";
 import type { IAttackResolver } from "../resolvers/attack-resolver.js";
 import type { IEffectResolver } from "../resolvers/effect-resolver.js";
 import type { ITileResolver } from "../resolvers/tile-resolver.js";
+import type { ITileTransitionResolver } from "../resolvers/tile-transition-resolver.js";
 import type { IHealthManager } from "../managers/health-manager.js";
 import type { IEffectManager } from "../managers/effect-manager.js";
 import type { ITileManager } from "../managers/tile-manager.js";
@@ -39,6 +40,7 @@ export interface GameContext {
   readonly tileValidator: ITileValidator;
 
   // Resolvers
+  readonly tileTransitionResolver: ITileTransitionResolver;
   readonly movementResolver: IMovementResolver;
   readonly attackResolver: IAttackResolver;
   readonly effectResolver: IEffectResolver;

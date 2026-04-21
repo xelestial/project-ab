@@ -22,19 +22,20 @@ import { EffectManager } from "../../managers/effect-manager.js";
 import { TileManager } from "../../managers/tile-manager.js";
 import { TurnManager } from "../../managers/turn-manager.js";
 import { ActionProcessor } from "../../loop/action-processor.js";
-import { TestStateBuilder, makeRegistry } from "../test-helpers.js";
+import { TestStateBuilder, makeRegistry, makeTileTransitionResolver } from "../test-helpers.js";
 import type { MetaId, PlayerId, UnitId, GameId, GameState } from "@ab/metadata";
 
 // ─── 기본 픽스처 레지스트리 ─────────────────────────────────────────────────────
 
 const registry = makeRegistry();
+const tileTransition = makeTileTransitionResolver(registry);
 const applicator = new StateApplicator();
 const av = new AttackValidator(registry);
-const ar = new AttackResolver(av, registry);
+const ar = new AttackResolver(av, registry, tileTransition);
 const mv = new MovementValidator(registry);
 const ev = new EffectValidator(registry);
 const tv = new TileValidator(registry);
-const mr = new MovementResolver(mv, registry);
+const mr = new MovementResolver(mv, tileTransition);
 const er = new EffectResolver(ev, registry);
 const tr = new TileResolver(tv, registry);
 const hm = new HealthManager(applicator);
@@ -222,7 +223,7 @@ describe("⚔️ 게임 메카닉 검증", () => {
     it("knockback 무기: 공격 후 타겟이 공격 반대 방향으로 1칸 이동", () => {
       const kbReg = makeKnockbackRegistry();
       const kbAv = new AttackValidator(kbReg);
-      const kbAr = new AttackResolver(kbAv, kbReg);
+      const kbAr = new AttackResolver(kbAv, kbReg, makeTileTransitionResolver(kbReg));
 
       // atk(5,3) → tgt(5,4), 빈칸(5,5) → tgt가 (5,5)로 밀려남
       const state = makeKbState({ row: 5, col: 3 }, { row: 5, col: 4 });
@@ -244,7 +245,7 @@ describe("⚔️ 게임 메카닉 검증", () => {
     it("밀려날 방향이 맵 경계면 blockedBy='wall'로 막힘", () => {
       const kbReg = makeKnockbackRegistry();
       const kbAv = new AttackValidator(kbReg);
-      const kbAr = new AttackResolver(kbAv, kbReg);
+      const kbAr = new AttackResolver(kbAv, kbReg, makeTileTransitionResolver(kbReg));
 
       // col 10이 끝 → col 11 = 경계 밖
       const state = makeKbState({ row: 5, col: 9 }, { row: 5, col: 10 });
@@ -262,7 +263,7 @@ describe("⚔️ 게임 메카닉 검증", () => {
     it("밀려난 유닛이 다른 유닛에 충돌 → 1 충돌 데미지 + 이동 안 함", () => {
       const kbReg = makeKnockbackRegistry();
       const kbAv = new AttackValidator(kbReg);
-      const kbAr = new AttackResolver(kbAv, kbReg);
+      const kbAr = new AttackResolver(kbAv, kbReg, makeTileTransitionResolver(kbReg));
 
       const now = new Date().toISOString();
       // blk(5,5)가 앞을 막고 있음
@@ -310,7 +311,7 @@ describe("⚔️ 게임 메카닉 검증", () => {
     it("충돌 데미지 누적 후 HealthManager가 사망 처리한다", () => {
       const kbReg = makeKnockbackRegistry();
       const kbAv = new AttackValidator(kbReg);
-      const kbAr = new AttackResolver(kbAv, kbReg);
+      const kbAr = new AttackResolver(kbAv, kbReg, makeTileTransitionResolver(kbReg));
       const kbHm = new HealthManager(applicator);
 
       // tgt HP=1: attack 2 → HP 0 (이미 치명), 충돌까지 발생
@@ -345,7 +346,7 @@ describe("⚔️ 게임 메카닉 검증", () => {
     it("밀려난 방향이 강 타일 → unit_river_enter 발생, 효과 초기화", () => {
       const kbReg = makeKnockbackRegistry();
       const kbAv = new AttackValidator(kbReg);
-      const kbAr = new AttackResolver(kbAv, kbReg);
+      const kbAr = new AttackResolver(kbAv, kbReg, makeTileTransitionResolver(kbReg));
 
       // (5,5)가 river
       const riverTile: import("@ab/metadata").TileState = {

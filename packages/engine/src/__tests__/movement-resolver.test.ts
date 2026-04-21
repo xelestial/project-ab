@@ -5,12 +5,12 @@ import { describe, it, expect } from "vitest";
 import type { GameState, TileState } from "@ab/metadata";
 import { MovementResolver } from "../resolvers/movement-resolver.js";
 import { MovementValidator } from "../validators/movement-validator.js";
-import { TestStateBuilder, makeRegistry } from "./test-helpers.js";
+import { TestStateBuilder, makeRegistry, makeTileTransitionResolver } from "./test-helpers.js";
 
 function makeResolver() {
   const registry = makeRegistry();
   const validator = new MovementValidator(registry);
-  return { resolver: new MovementResolver(validator, registry), registry };
+  return { resolver: new MovementResolver(validator, makeTileTransitionResolver(registry)), registry };
 }
 
 describe("MovementResolver", () => {

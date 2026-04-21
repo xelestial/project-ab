@@ -11,16 +11,17 @@ import { MovementResolver } from "../../resolvers/movement-resolver.js";
 import { EffectResolver } from "../../resolvers/effect-resolver.js";
 import { EffectValidator } from "../../validators/effect-validator.js";
 import { EndDetector } from "../../loop/end-detector.js";
-import { TestStateBuilder, makeRegistry } from "../test-helpers.js";
+import { TestStateBuilder, makeRegistry, makeTileTransitionResolver } from "../test-helpers.js";
 import type { GameState } from "@ab/metadata";
 
 const registry = makeRegistry();
+const tileTransition = makeTileTransitionResolver(registry);
 const applicator = new StateApplicator();
 const mv = new MovementValidator(registry);
 const ev = new EffectValidator(registry);
 const av = new AttackValidator(registry);
-const ar = new AttackResolver(av, registry);
-const mr = new MovementResolver(mv, registry);
+const ar = new AttackResolver(av, registry, tileTransition);
+const mr = new MovementResolver(mv, tileTransition);
 const er = new EffectResolver(ev, registry);
 const endDetector = new EndDetector();
 
@@ -455,7 +456,7 @@ describe("Rule Scenarios", () => {
         .build();
 
       const unit = state.units["u1"]!;
-      const mr2 = new MovementResolver(mv, registry);
+      const mr2 = new MovementResolver(mv, tileTransition);
       const changes = mr2.resolve(unit, { row: 5, col: 5 }, state);
 
       const effectAdd = changes.find((c) => c.type === "unit_effect_add");
@@ -481,7 +482,7 @@ describe("Rule Scenarios", () => {
         .build();
 
       const unit = state.units["u1"]!;
-      const mr2 = new MovementResolver(mv, registry);
+      const mr2 = new MovementResolver(mv, tileTransition);
       const changes = mr2.resolve(unit, { row: 5, col: 5 }, state);
 
       const effectRemove = changes.find(

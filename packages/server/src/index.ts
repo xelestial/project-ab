@@ -40,20 +40,22 @@ function loadRegistry(): DataRegistry {
   const reg = new DataRegistry();
 
   try {
-    const units        = require("../../metadata/data/units.json")                  as unknown[];
-    const weapons      = require("../../metadata/data/weapons.json")               as unknown[];
-    const skills       = require("../../metadata/data/skills.json")                as unknown[];
-    const effects      = require("../../metadata/data/effects.json")               as unknown[];
-    const tiles        = require("../../metadata/data/tiles.json")                 as unknown[];
-    const map01        = require("../../metadata/data/maps/test-map-01.json")      as unknown;
-    const map1v1_6v6   = require("../../metadata/data/maps/map-1v1-6v6.json")      as unknown;
-    const map2v2_6v6   = require("../../metadata/data/maps/map-2v2-6v6.json")      as unknown;
+    const units              = require("../../metadata/data/units.json")                         as unknown[];
+    const weapons            = require("../../metadata/data/weapons.json")                      as unknown[];
+    const skills             = require("../../metadata/data/skills.json")                       as unknown[];
+    const effects            = require("../../metadata/data/effects.json")                      as unknown[];
+    const tiles              = require("../../metadata/data/tiles.json")                        as unknown[];
+    const elementalReactions = require("../../metadata/data/elemental-reactions.json")          as unknown[];
+    const map01              = require("../../metadata/data/maps/test-map-01.json")             as unknown;
+    const map1v1_6v6         = require("../../metadata/data/maps/map-1v1-6v6.json")             as unknown;
+    const map2v2_6v6         = require("../../metadata/data/maps/map-2v2-6v6.json")             as unknown;
 
     reg.loadUnits(units);
     reg.loadWeapons(weapons);
     reg.loadSkills(skills);
     reg.loadEffects(effects);
     reg.loadTiles(tiles);
+    reg.loadElementalReactions(elementalReactions);
     reg.loadMaps([map01, map1v1_6v6, map2v2_6v6]);
   } catch (e) {
     console.warn("Metadata JSON load failed (expected during unit tests):", e);

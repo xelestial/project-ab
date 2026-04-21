@@ -13,6 +13,7 @@ import { MovementValidator } from "../validators/movement-validator.js";
 import { AttackValidator } from "../validators/attack-validator.js";
 import { EffectValidator } from "../validators/effect-validator.js";
 import { TileValidator } from "../validators/tile-validator.js";
+import { TileTransitionResolver } from "../resolvers/tile-transition-resolver.js";
 import { MovementResolver } from "../resolvers/movement-resolver.js";
 import { AttackResolver } from "../resolvers/attack-resolver.js";
 import { EffectResolver } from "../resolvers/effect-resolver.js";
@@ -61,8 +62,9 @@ export class GameFactory {
     const tileValidator = new TileValidator(this.registry);
 
     // ── Resolvers ──────────────────────────────────────────────────────────
-    const movementResolver = new MovementResolver(movementValidator, this.registry);
-    const attackResolver = new AttackResolver(attackValidator, this.registry);
+    const tileTransitionResolver = new TileTransitionResolver(this.registry);
+    const movementResolver = new MovementResolver(movementValidator, tileTransitionResolver);
+    const attackResolver = new AttackResolver(attackValidator, this.registry, tileTransitionResolver);
     const effectResolver = new EffectResolver(effectValidator, this.registry);
     const tileResolver = new TileResolver(tileValidator, this.registry);
 
@@ -113,6 +115,7 @@ export class GameFactory {
       attackValidator,
       effectValidator,
       tileValidator,
+      tileTransitionResolver,
       movementResolver,
       attackResolver,
       effectResolver,

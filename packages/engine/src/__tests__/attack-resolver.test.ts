@@ -6,7 +6,7 @@ import { buildDataRegistry } from "@ab/metadata";
 import type { GameState } from "@ab/metadata";
 import { AttackResolver } from "../resolvers/attack-resolver.js";
 import { AttackValidator } from "../validators/attack-validator.js";
-import { TestStateBuilder, makeRegistry, FIXTURE_WEAPONS, FIXTURE_EFFECTS, FIXTURE_TILES } from "./test-helpers.js";
+import { TestStateBuilder, makeRegistry, makeTileTransitionResolver, FIXTURE_WEAPONS, FIXTURE_EFFECTS, FIXTURE_TILES, FIXTURE_ELEMENTAL_REACTIONS } from "./test-helpers.js";
 
 // ─── Helper registry builders ─────────────────────────────────────────────────
 
@@ -26,6 +26,8 @@ const EFFECT_ACID = {
   removeConditions: [{ type: "turns", count: 3 }],
 };
 const TILE_PLAIN = { id: "tile_plain", tileType: "plain", nameKey: "t", descKey: "t", moveCost: 1, cannotStop: false, impassable: false, damagePerTurn: 0 };
+const TILE_FIRE = { id: "tile_fire", tileType: "fire", nameKey: "t", descKey: "t", moveCost: 1, cannotStop: false, impassable: false, damagePerTurn: 2, appliesEffectId: "effect_fire" };
+const TILE_WATER = { id: "tile_water", tileType: "water", nameKey: "t", descKey: "t", moveCost: 1, cannotStop: false, impassable: false, damagePerTurn: 0, removesEffectTypes: ["fire", "acid"] };
 
 function makeUnitState(
   id: string, meta: string, player: string, row: number, col: number,
@@ -75,7 +77,7 @@ describe("AttackResolver", () => {
     it("deals base damage minus armor to target", () => {
       const registry = makeRegistry();
       const validator = new AttackValidator(registry);
-      const resolver = new AttackResolver(validator, registry);
+      const resolver = new AttackResolver(validator, registry, makeTileTransitionResolver(registry));
 
       // t1 = tanker, uses wpn_melee_basic (damage 2), target has armor 1
       const state = TestStateBuilder.create()
@@ -93,7 +95,7 @@ describe("AttackResolver", () => {
     it("deals 0 damage when armor exceeds base damage", () => {
       const registry = makeRegistry();
       const validator = new AttackValidator(registry);
-      const resolver = new AttackResolver(validator, registry);
+      const resolver = new AttackResolver(validator, registry, makeTileTransitionResolver(registry));
 
       const state = TestStateBuilder.create()
         .withUnit("u1", "f1", "p1", 5, 5)
@@ -107,7 +109,7 @@ describe("AttackResolver", () => {
     it("doubles damage on acid-affected target", () => {
       const registry = makeRegistry();
       const validator = new AttackValidator(registry);
-      const resolver = new AttackResolver(validator, registry);
+      const resolver = new AttackResolver(validator, registry, makeTileTransitionResolver(registry));
 
       const acidEffect: import("@ab/metadata").ActiveEffect = {
         effectId: "effect_acid" as import("@ab/metadata").MetaId,
@@ -129,7 +131,7 @@ describe("AttackResolver", () => {
     it("returns empty if attack validation fails", () => {
       const registry = makeRegistry();
       const validator = new AttackValidator(registry);
-      const resolver = new AttackResolver(validator, registry);
+      const resolver = new AttackResolver(validator, registry, makeTileTransitionResolver(registry));
 
       const state = TestStateBuilder.create()
         .withUnit("u1", "f1", "p1", 5, 5)
@@ -143,7 +145,7 @@ describe("AttackResolver", () => {
     it("no damage change if target tile is empty", () => {
       const registry = makeRegistry();
       const validator = new AttackValidator(registry);
-      const resolver = new AttackResolver(validator, registry);
+      const resolver = new AttackResolver(validator, registry, makeTileTransitionResolver(registry));
 
       const state = TestStateBuilder.create()
         .withUnit("u1", "f1", "p1", 5, 5)
@@ -168,7 +170,7 @@ describe("AttackResolver", () => {
 
     it("pushes target away into free tile", () => {
       const reg = buildDataRegistry({ units: [KB_UNIT_A, KB_UNIT_B], weapons: [KB_WEAPON], skills: [], effects: [], tiles: [TILE_PLAIN], maps: [] });
-      const resolver = new AttackResolver(new AttackValidator(reg), reg);
+      const resolver = new AttackResolver(new AttackValidator(reg), reg, makeTileTransitionResolver(reg));
 
       const u1 = makeUnitState("u1", "kbu", "p1", 5, 4);
       const u2 = makeUnitState("u2", "kbu2", "p2", 5, 5);
@@ -182,7 +184,7 @@ describe("AttackResolver", () => {
 
     it("knockback into wall stops unit without damage", () => {
       const reg = buildDataRegistry({ units: [KB_UNIT_A, KB_UNIT_B], weapons: [KB_WEAPON], skills: [], effects: [], tiles: [TILE_PLAIN], maps: [] });
-      const resolver = new AttackResolver(new AttackValidator(reg), reg);
+      const resolver = new AttackResolver(new AttackValidator(reg), reg, makeTileTransitionResolver(reg));
 
       // Place target at col 10 (edge), pushed right would go col 11 (OOB)
       const u1 = makeUnitState("u1", "kbu", "p1", 5, 9);
@@ -197,7 +199,7 @@ describe("AttackResolver", () => {
 
     it("knockback into occupied tile deals collision damage", () => {
       const reg = buildDataRegistry({ units: [KB_UNIT_A, KB_UNIT_B, KB_UNIT_C], weapons: [KB_WEAPON], skills: [], effects: [], tiles: [TILE_PLAIN], maps: [] });
-      const resolver = new AttackResolver(new AttackValidator(reg), reg);
+      const resolver = new AttackResolver(new AttackValidator(reg), reg, makeTileTransitionResolver(reg));
 
       const u1 = makeUnitState("u1", "kbu", "p1", 5, 4);
       const u2 = makeUnitState("u2", "kbu2", "p2", 5, 5);
@@ -223,7 +225,7 @@ describe("AttackResolver", () => {
         tiles: [TILE_PLAIN],
         maps: [],
       });
-      const resolver = new AttackResolver(new AttackValidator(reg), reg);
+      const resolver = new AttackResolver(new AttackValidator(reg), reg, makeTileTransitionResolver(reg));
 
       const frozenEffect: import("@ab/metadata").ActiveEffect = {
         effectId: "effect_freeze" as import("@ab/metadata").MetaId,
@@ -262,7 +264,7 @@ describe("AttackResolver", () => {
         ],
         maps: [],
       });
-      const resolver = new AttackResolver(new AttackValidator(reg), reg);
+      const resolver = new AttackResolver(new AttackValidator(reg), reg, makeTileTransitionResolver(reg));
 
       const fireEffect: import("@ab/metadata").ActiveEffect = {
         effectId: "effect_fire" as import("@ab/metadata").MetaId,
@@ -295,8 +297,8 @@ describe("AttackResolver", () => {
       damage: 2, attribute: "fire", penetrating: false, arcing: false };
 
     it("applies fire effect to hit unit", () => {
-      const reg = buildDataRegistry({ units: [FIRE_UNIT_A, FIRE_UNIT_B], weapons: [FIRE_WEAPON], skills: [], effects: [EFFECT_FIRE], tiles: [TILE_PLAIN], maps: [] });
-      const resolver = new AttackResolver(new AttackValidator(reg), reg);
+      const reg = buildDataRegistry({ units: [FIRE_UNIT_A, FIRE_UNIT_B], weapons: [FIRE_WEAPON], skills: [], effects: [EFFECT_FIRE], tiles: [TILE_PLAIN, TILE_FIRE], maps: [] });
+      const resolver = new AttackResolver(new AttackValidator(reg), reg, makeTileTransitionResolver(reg));
 
       const u1 = makeUnitState("u1", "fua", "p1", 5, 5);
       const u2 = makeUnitState("u2", "fub", "p2", 5, 8);
@@ -309,8 +311,8 @@ describe("AttackResolver", () => {
     });
 
     it("converts target tile to fire attribute", () => {
-      const reg = buildDataRegistry({ units: [FIRE_UNIT_A, FIRE_UNIT_B], weapons: [FIRE_WEAPON], skills: [], effects: [EFFECT_FIRE], tiles: [TILE_PLAIN], maps: [] });
-      const resolver = new AttackResolver(new AttackValidator(reg), reg);
+      const reg = buildDataRegistry({ units: [FIRE_UNIT_A, FIRE_UNIT_B], weapons: [FIRE_WEAPON], skills: [], effects: [EFFECT_FIRE], tiles: [TILE_PLAIN, TILE_FIRE], maps: [] });
+      const resolver = new AttackResolver(new AttackValidator(reg), reg, makeTileTransitionResolver(reg));
 
       const u1 = makeUnitState("u1", "fua", "p1", 5, 5);
       const u2 = makeUnitState("u2", "fub", "p2", 5, 8);
@@ -337,10 +339,11 @@ describe("AttackResolver", () => {
         weapons: [WATER_WEAPON],
         skills: [],
         effects: [EFFECT_FIRE, EFFECT_WATER],
-        tiles: [TILE_PLAIN],
+        tiles: [TILE_PLAIN, TILE_WATER],
         maps: [],
+        elementalReactions: [{ attackAttr: "water", targetEffect: "fire", damageMultiplier: 1, removedEffects: ["fire"] }],
       });
-      const resolver = new AttackResolver(new AttackValidator(reg), reg);
+      const resolver = new AttackResolver(new AttackValidator(reg), reg, makeTileTransitionResolver(reg));
 
       const fireEffect: import("@ab/metadata").ActiveEffect = {
         effectId: "effect_fire" as import("@ab/metadata").MetaId,
