@@ -9,6 +9,8 @@ import type { IRoundManager } from "../managers/round-manager.js";
 import type { IDraftManager } from "../managers/draft-manager.js";
 import type { ITurnManager } from "../managers/turn-manager.js";
 import type { IEndDetector } from "./end-detector.js";
+import type { IEffectManager } from "../managers/effect-manager.js";
+import type { IHealthManager } from "../managers/health-manager.js";
 import type { IEventBus } from "../support/event-bus.js";
 import type { IGameLogger } from "../support/game-logger.js";
 import { DRAFT_TIMEOUT_MS } from "@ab/metadata";
@@ -66,6 +68,8 @@ export class GameLoop implements IGameLoop {
     private readonly actionProcessor: IActionProcessor,
     private readonly postProcessor: IPostProcessor,
     private readonly endDetector: IEndDetector,
+    private readonly effectManager: IEffectManager,
+    private readonly healthManager: IHealthManager,
     private readonly eventBus: IEventBus,
     private readonly logger: IGameLogger,
   ) {}
@@ -124,13 +128,13 @@ export class GameLoop implements IGameLoop {
           }
         }
 
-        // Effect tick for all units of current player
+        // Effect tick for all units of current player (fire/acid damage, countdown)
         for (const unitId of Object.values(state.units)
           .filter((u) => u.alive && u.playerId === playerId)
           .map((u) => u.unitId)) {
-          // EffectManager processes turn start per unit
-          // We do it inline here for simplicity
+          state = this.effectManager.processTurnStart(unitId, state);
         }
+        state = this.healthManager.applyDeaths(state);
 
         this.eventBus.emit({
           type: "turn.start",

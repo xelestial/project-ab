@@ -104,6 +104,8 @@ export class GameFactory {
       actionProcessor,
       postProcessor,
       endDetector,
+      effectManager,
+      healthManager,
       eventBus,
       logger,
     );

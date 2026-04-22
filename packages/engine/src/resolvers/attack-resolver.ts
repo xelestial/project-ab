@@ -252,6 +252,16 @@ export class AttackResolver implements IAttackResolver {
     attackAttr: AttackAttribute,
     target: UnitState,
   ): { multiplier: number; reactionChanges: GameChange[] } {
+    // Check if target has always_on immune_elemental_effects passive (e.g. b2)
+    const passives = this.registry.getUnitPassives(target.metaId);
+    for (const passive of passives) {
+      if (passive.trigger.type === "always_on") {
+        if (passive.actions.some((a) => a.type === "immune_elemental_effects")) {
+          return { multiplier: 1, reactionChanges: [] };
+        }
+      }
+    }
+
     const reactions = this.registry.getElementalReactions();
     const reactionChanges: GameChange[] = [];
     let multiplier = 1;

@@ -615,3 +615,116 @@ describe("6. StateApplicator — unit_pull 처리", () => {
     console.log(`  ✅ unit_pull: (5,8) → (5,6) 위치 갱신`);
   });
 });
+
+// ─── 7. b2 immune_elemental_effects ──────────────────────────────────────────
+
+describe("7. b2 패시브 — immune_elemental_effects: 원소 반응 면역", () => {
+  function makeB2ReactionRegistry() {
+    const EFFECT_FREEZE = {
+      id: "effect_freeze", nameKey: "e", descKey: "e", effectType: "freeze",
+      damagePerTurn: 0, blocksAllActions: true, alsoAffectsTile: false,
+      clearsAllEffectsOnApply: true,
+      removeConditions: [{ type: "turns" as const, count: 2 }],
+    };
+    const EFFECT_FIRE2 = { ...EFFECT_FIRE };
+    return buildDataRegistry({
+      units: [
+        { id: "b2", nameKey: "n", descKey: "d", class: "brute", faction: "b",
+          baseMovement: 3, baseHealth: 5, baseArmor: 0, attributes: [],
+          primaryWeaponId: "wpn_fire_atk", skillIds: [],
+          passiveIds: ["passive_b2_tile_immunity"], spriteKey: "s" },
+        { id: "normal", nameKey: "n", descKey: "d", class: "fighter", faction: "a",
+          baseMovement: 3, baseHealth: 5, baseArmor: 0, attributes: [],
+          primaryWeaponId: "wpn_fire_atk", skillIds: [], passiveIds: [], spriteKey: "s" },
+        { id: "attacker", nameKey: "n", descKey: "d", class: "fighter", faction: "a",
+          baseMovement: 3, baseHealth: 5, baseArmor: 0, attributes: [],
+          primaryWeaponId: "wpn_fire_atk", skillIds: [], passiveIds: [], spriteKey: "s" },
+      ],
+      weapons: [
+        { id: "wpn_fire_atk", nameKey: "w", descKey: "d", attackType: "melee", rangeType: "single",
+          minRange: 1, maxRange: 1, damage: 2, attribute: "fire", penetrating: false, arcing: false },
+      ],
+      skills: [],
+      effects: [EFFECT_FIRE2, EFFECT_FREEZE],
+      tiles: [TILE_PLAIN, TILE_FIRE],
+      maps: [],
+      unitPassives: [
+        { id: "passive_b2_tile_immunity",
+          nameKey: "p", descKey: "p",
+          trigger: { type: "always_on" },
+          actions: [
+            { type: "immune_tile_effects" },
+            { type: "immune_tile_damage" },
+            { type: "immune_elemental_effects" },
+          ] },
+      ],
+      elementalReactions: [
+        { attackAttr: "fire", targetEffect: "freeze",
+          damageMultiplier: 2,
+          removedEffects: ["freeze"] },
+      ],
+    });
+  }
+
+  it("일반 유닛이 freeze 상태에서 fire 공격 받으면 2× 데미지 + freeze 제거", () => {
+    const reg = makeB2ReactionRegistry();
+    const av = new AttackValidator(reg);
+    const ar = new AttackResolver(av, reg, new TileTransitionResolver(reg));
+
+    const atk = makeUnit("atk", "attacker", "p1", 5, 4);
+    const tgt = makeUnit("tgt", "normal", "p2", 5, 5, {
+      activeEffects: [
+        { effectId: "effect_freeze" as import("@ab/metadata").MetaId,
+          effectType: "freeze", turnsRemaining: 2 },
+      ],
+    });
+    const state = makeState({ atk, tgt });
+
+    const changes = ar.resolve(atk, { row: 5, col: 5 }, state);
+
+    // freeze 제거 change 존재
+    const removeFreeze = changes.find(c =>
+      c.type === "unit_effect_remove" &&
+      (c as Extract<typeof c, { type: "unit_effect_remove" }>).effectType === "freeze"
+    );
+    expect(removeFreeze).toBeDefined();
+
+    // 데미지: baseDmg=2, armor=0, multiplier=2 → 4
+    const dmg = changes.find(c => c.type === "unit_damage") as any;
+    expect(dmg).toBeDefined();
+    expect(dmg.amount).toBe(4);
+
+    console.log(`  ✅ 일반 유닛 freeze+fire 반응: 데미지 ${dmg.amount}, freeze 제거`);
+  });
+
+  it("b2는 freeze 상태에서 fire 공격 받아도 반응 없음 — 1× 데미지, freeze 유지", () => {
+    const reg = makeB2ReactionRegistry();
+    const av = new AttackValidator(reg);
+    const ar = new AttackResolver(av, reg, new TileTransitionResolver(reg));
+
+    const atk = makeUnit("atk", "attacker", "p1", 5, 4);
+    const b2 = makeUnit("b2u", "b2", "p2", 5, 5, {
+      activeEffects: [
+        { effectId: "effect_freeze" as import("@ab/metadata").MetaId,
+          effectType: "freeze", turnsRemaining: 2 },
+      ],
+    });
+    const state = makeState({ atk, b2u: b2 });
+
+    const changes = ar.resolve(atk, { row: 5, col: 5 }, state);
+
+    // freeze 제거 change 없어야 함
+    const removeFreeze = changes.find(c =>
+      c.type === "unit_effect_remove" &&
+      (c as Extract<typeof c, { type: "unit_effect_remove" }>).effectType === "freeze"
+    );
+    expect(removeFreeze).toBeUndefined();
+
+    // 데미지: baseDmg=2, armor=0, multiplier=1 (반응 없음) → 2
+    const dmg = changes.find(c => c.type === "unit_damage") as any;
+    expect(dmg).toBeDefined();
+    expect(dmg.amount).toBe(2);
+
+    console.log(`  ✅ b2 immune_elemental_effects: 반응 없음, 데미지 ${dmg.amount}, freeze 유지`);
+  });
+});

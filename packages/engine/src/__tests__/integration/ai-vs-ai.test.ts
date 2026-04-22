@@ -78,9 +78,24 @@ class SimpleAI implements IPlayerAdapter {
     throw new Error("not in draft");
   }
 
+  async requestUnitOrder(
+    _state: import("@ab/metadata").GameState,
+    aliveUnitIds: UnitId[],
+    _timeoutMs: number,
+  ): Promise<UnitId[]> {
+    return aliveUnitIds;
+  }
+
   async requestAction(state: import("@ab/metadata").GameState): Promise<import("@ab/metadata").PlayerAction> {
+    // For unit-level slots, only act on the specific unit assigned to this turn slot
+    const currentSlot = state.turnOrder[state.currentTurnIndex];
+    const slotUnitId = currentSlot?.unitId;
+
     const myUnits = Object.values(state.units).filter(
-      (u) => u.alive && u.playerId === this.playerId,
+      (u) =>
+        u.alive &&
+        u.playerId === this.playerId &&
+        (slotUnitId === undefined || u.unitId === slotUnitId),
     );
     const enemies = Object.values(state.units).filter(
       (u) => u.alive && u.playerId !== this.playerId,
