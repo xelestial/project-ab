@@ -16,6 +16,10 @@ export const TEAM_SIZE_2V2 = 2 as const;
 // Rounds / Turns
 export const MAX_ROUNDS = 30 as const;
 
+// Turn / action timeouts (ms)
+export const TURN_TIMEOUT_MS = 60_000 as const;        // 60 s per action
+export const UNIT_ORDER_TIMEOUT_MS = 30_000 as const;  // 30 s for unit-order draft
+
 // Draft
 export const DRAFT_TIMEOUT_MS = 180_000 as const; // 180 s
 export const DRAFT_POOL_SIZE = 6 as const; // shared pool in 2v2
@@ -52,6 +56,11 @@ export const ANIM_ATTACK_MS = 500 as const;
 export const ANIM_EFFECT_MS = 400 as const;
 export const ANIM_DEATH_MS = 600 as const;
 export const ANIM_TURN_TRANSITION_MS = 800 as const;
+
+// Terrain generation
+export const TERRAIN_ROCK_COUNT = 4 as const;          // rocks per 11×11 grid
+export const TERRAIN_WATER_COUNT = 4 as const;         // water tiles per 11×11 grid
+export const RIVER_FORMATION_MIN_SIZE = 3 as const;    // min connected water tiles to become river
 
 // Error / validation
 export const MAX_PATH_LENGTH = GRID_SIZE * GRID_SIZE;

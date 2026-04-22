@@ -22,7 +22,7 @@ const EFFECT_FIRE = {
 };
 const EFFECT_ACID = {
   id: "effect_acid", nameKey: "e", descKey: "e", effectType: "acid",
-  damagePerTurn: 1, blocksAllActions: false, alsoAffectsTile: true,
+  damagePerTurn: 1, incomingDamageMultiplier: 2, blocksAllActions: false, alsoAffectsTile: true,
   removeConditions: [{ type: "turns", count: 3 }],
 };
 const TILE_PLAIN = { id: "tile_plain", tileType: "plain", nameKey: "t", descKey: "t", moveCost: 1, cannotStop: false, impassable: false, damagePerTurn: 0 };

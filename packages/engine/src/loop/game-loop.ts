@@ -13,7 +13,7 @@ import type { IEffectManager } from "../managers/effect-manager.js";
 import type { IHealthManager } from "../managers/health-manager.js";
 import type { IEventBus } from "../support/event-bus.js";
 import type { IGameLogger } from "../support/game-logger.js";
-import { DRAFT_TIMEOUT_MS } from "@ab/metadata";
+import { DRAFT_TIMEOUT_MS, TURN_TIMEOUT_MS, UNIT_ORDER_TIMEOUT_MS } from "@ab/metadata";
 
 // ─── Player adapter interface (P-06: human = AI to engine) ────────────────────
 
@@ -58,9 +58,6 @@ export interface IGameLoop {
 }
 
 export class GameLoop implements IGameLoop {
-  private readonly TURN_TIMEOUT_MS = 60_000;
-  private readonly UNIT_ORDER_TIMEOUT_MS = 30_000;
-
   constructor(
     private readonly roundManager: IRoundManager,
     private readonly draftManager: IDraftManager,
@@ -99,7 +96,7 @@ export class GameLoop implements IGameLoop {
     while (!gameEnded) {
       // ── Unit order draft: each player picks their unit activation order ──────
       const lastFirstPlayerId = state.round > 1 ? (state.turnOrder[0]?.playerId ?? null) : null;
-      const unitOrders = await this.collectUnitOrders(adapters, state, this.UNIT_ORDER_TIMEOUT_MS);
+      const unitOrders = await this.collectUnitOrders(adapters, state, UNIT_ORDER_TIMEOUT_MS);
       const turnOrder = this.draftManager.buildTurnOrder(
         state,
         state.round,
@@ -166,7 +163,7 @@ export class GameLoop implements IGameLoop {
           };
 
           const action = await adapter
-            .requestAction(state, this.TURN_TIMEOUT_MS)
+            .requestAction(state, TURN_TIMEOUT_MS)
             .catch(() => passAction);
 
           // Pass always ends the turn

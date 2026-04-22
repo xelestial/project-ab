@@ -4,7 +4,7 @@
  */
 import type { IDataRegistry } from "@ab/metadata";
 import type { GameState, PlayerId, MetaId, TurnSlot } from "@ab/metadata";
-import { GRID_SIZE } from "@ab/metadata";
+import { GRID_SIZE, DRAFT_TIMEOUT_MS } from "@ab/metadata";
 import { generateTerrain } from "../map/terrain-generator.js";
 import type { GameContext } from "./game-context.js";
 
@@ -188,7 +188,7 @@ export class GameFactory {
         ? {
             poolIds: options.draftPoolIds as MetaId[],
             slots: [],
-            timeoutRemainingMs: 180_000,
+            timeoutRemainingMs: DRAFT_TIMEOUT_MS,
           }
         : undefined,
       endResult: undefined,

@@ -439,14 +439,17 @@ export class AttackResolver implements IAttackResolver {
 function calcDamage(
   baseDamage: number,
   target: UnitState,
-  _registry: IDataRegistry,
+  registry: IDataRegistry,
 ): number {
   let dmg = baseDamage - target.currentArmor;
   if (dmg < 0) dmg = 0;
 
-  // Acid effect: damage doubled (data property on EffectMeta could encode this in future)
-  if (hasEffect(target, "acid")) {
-    dmg = dmg * 2;
+  // Apply incoming damage multipliers from active effects (e.g. acid → ×2)
+  for (const activeEffect of target.activeEffects) {
+    const meta = registry.getEffectByType(activeEffect.effectType);
+    if (meta !== undefined && meta.incomingDamageMultiplier !== 1) {
+      dmg = Math.floor(dmg * meta.incomingDamageMultiplier);
+    }
   }
 
   return dmg;

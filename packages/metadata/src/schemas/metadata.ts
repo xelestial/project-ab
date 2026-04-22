@@ -128,6 +128,11 @@ export const EffectMetaSchema = z.object({
   effectType: UnitEffectTypeSchema,
   /** Damage dealt per turn (start of affected player's turn) */
   damagePerTurn: z.number().int().min(0).default(0),
+  /**
+   * Multiplier applied to incoming attack damage while this effect is active.
+   * e.g. acid = 2 (double damage), default = 1 (no change).
+   */
+  incomingDamageMultiplier: z.number().min(0).default(1),
   /** Whether this effect prevents all actions */
   blocksAllActions: z.boolean().default(false),
   /** Whether this effect is also applied to the tile simultaneously */

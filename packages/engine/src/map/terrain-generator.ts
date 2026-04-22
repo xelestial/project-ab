@@ -7,6 +7,11 @@
  * Protected: spawn points are never blocked
  */
 import type { TileState, TileAttributeType, SpawnPoint } from "@ab/metadata";
+import {
+  TERRAIN_ROCK_COUNT,
+  TERRAIN_WATER_COUNT,
+  RIVER_FORMATION_MIN_SIZE,
+} from "@ab/metadata";
 
 const PLAIN_BASES: TileAttributeType[] = ["plain", "sand", "road"];
 
@@ -29,8 +34,8 @@ export function generateTerrain(
   spawnPoints: SpawnPoint[],
 ): TerrainResult {
   const baseTile = PLAIN_BASES[Math.floor(Math.random() * PLAIN_BASES.length)]!;
-  const rockCount = gridSize <= 11 ? 4 : 8;
-  const waterCount = gridSize <= 11 ? 4 : 8;
+  const rockCount = gridSize <= 11 ? TERRAIN_ROCK_COUNT : TERRAIN_ROCK_COUNT * 2;
+  const waterCount = gridSize <= 11 ? TERRAIN_WATER_COUNT : TERRAIN_WATER_COUNT * 2;
 
   // Protected spawn positions
   const protectedSet = new Set<string>();
@@ -99,7 +104,7 @@ export function generateTerrain(
       }
     }
 
-    if (group.length >= 3) {
+    if (group.length >= RIVER_FORMATION_MIN_SIZE) {
       for (const p of group) {
         tiles[`${p.row},${p.col}`]!.attribute = "river";
       }

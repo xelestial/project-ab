@@ -184,6 +184,7 @@ export const FIXTURE_EFFECTS = [
     descKey: "effect.acid.desc",
     effectType: "acid",
     damagePerTurn: 1,
+    incomingDamageMultiplier: 2,
     blocksAllActions: false,
     alsoAffectsTile: true,
     removeConditions: [
