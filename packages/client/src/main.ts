@@ -128,11 +128,27 @@ const TILE_SIDE_COLORS: Record<string, string> = {
 
 const PLAYER_COLORS = ["#388bfd", "#f85149", "#a371f7", "#e3b341"];
 
-function isoParams(gridSize: number): {
+function isoParams(
+  gridSize: number,
+  availW?: number,
+  availH?: number,
+): {
   TW: number; TH: number; HW: number; HH: number; DEPTH: number;
   cx: number; cy: number; canvasW: number; canvasH: number;
 } {
-  const TW = gridSize <= 11 ? 64 : 48;
+  let TW: number;
+  if (availW !== undefined && availH !== undefined && availW > 0 && availH > 0) {
+    // 패딩(0.5rem = 8px × 2) 제외한 실제 사용 가능한 공간
+    const usableW = availW - 16;
+    const usableH = availH - 16;
+    // canvasW = (gridSize + 1) * TW  →  TW = usableW / (gridSize + 1)
+    // canvasH ≈ TW/2 * (gridSize + 2.4)  →  TW = usableH * 2 / (gridSize + 2.4)
+    const twFromW = Math.floor(usableW / (gridSize + 1));
+    const twFromH = Math.floor(usableH * 2 / (gridSize + 2.4));
+    TW = Math.max(32, Math.min(twFromW, twFromH, 256)); // 32 ~ 256 범위 제한
+  } else {
+    TW = gridSize <= 11 ? 64 : 48;
+  }
   const TH = TW / 2;
   const HW = TW / 2;
   const HH = TH / 2;
@@ -290,12 +306,14 @@ interface RenderOpts {
   attackRangeTiles?: Array<{ row: number; col: number }>; // dim red - attack range (no enemy)
   attackTargetTiles?: Array<{ row: number; col: number }>; // bright red - enemy in range
   selectedPos?: { row: number; col: number } | null;     // yellow glow - selected unit
+  availW?: number;   // board-wrap 가용 너비 (동적 타일 크기 계산용)
+  availH?: number;   // board-wrap 가용 높이
 }
 
 function renderIso(canvas: HTMLCanvasElement, opts: RenderOpts): void {
   const { gridSize, tiles = {}, units = [], playerIds = [], highlightHalf, placedUnits: placed = [] } = opts;
   const baseTile = opts.baseTile ?? "plain";
-  const p = isoParams(gridSize);
+  const p = isoParams(gridSize, opts.availW, opts.availH);
 
   canvas.width = p.canvasW;
   canvas.height = p.canvasH;
@@ -1149,6 +1167,11 @@ function renderGame(state: GameStateSnapshot): void {
     }
   }
 
+  // board-wrap 크기 기반 동적 타일 크기 계산
+  const boardWrap = document.querySelector(".board-wrap") as HTMLElement | null;
+  const availW = boardWrap?.clientWidth;
+  const availH = boardWrap?.clientHeight;
+
   // Set up board interaction
   setupBoardClick(canvas, state, isMyTurn, gridSize);
 
@@ -1164,6 +1187,8 @@ function renderGame(state: GameStateSnapshot): void {
     attackRangeTiles: attackRangeHighlights,
     attackTargetTiles: attackTargetHighlights,
     selectedPos: selectedGameUnitPos,
+    availW,
+    availH,
   });
 
   renderTurnOrder(state, playerIds);
@@ -1633,5 +1658,16 @@ async function tryRestoreSession(): Promise<void> {
 }
 
 void tryRestoreSession();
+
+// ─── 창 크기 변경 시 게임 보드 재렌더링 ───────────────────────────────────────
+// ResizeObserver로 board-wrap 크기 변화를 감지해 캔버스를 즉시 재렌더링
+const boardWrapEl = document.querySelector(".board-wrap");
+if (boardWrapEl) {
+  new ResizeObserver(() => {
+    if (lastGameState && document.getElementById("screen-game")?.classList.contains("active")) {
+      renderGame(lastGameState);
+    }
+  }).observe(boardWrapEl);
+}
 
 renderMenu();
