@@ -3,6 +3,19 @@
  * Server URL is read from game-modes.json at runtime.
  */
 
+export interface TileMetaClient {
+  id: string;
+  tileType: string;
+  nameKey: string;
+  moveCost: number;
+  cannotStop: boolean;
+  impassable: boolean;
+  damagePerTurn: number;
+  appliesEffectId?: string;
+  removesEffectTypes: string[];
+  clearsAllEffects: boolean;
+}
+
 export interface ApiLoginResponse {
   accessToken: string;
   refreshToken: string;
@@ -89,6 +102,12 @@ export class ApiClient {
     });
     if (!res.ok) throw new Error(`Add AI failed: ${res.status}`);
     return (await res.json()) as ApiAddAiResponse;
+  }
+
+  async fetchTileMetas(): Promise<TileMetaClient[]> {
+    const res = await fetch(`${this.baseUrl}/api/v1/meta/tiles`);
+    if (!res.ok) throw new Error(`Fetch tile metas failed: ${res.status}`);
+    return ((await res.json()) as { tiles: TileMetaClient[] }).tiles;
   }
 
   getToken(): string | null {

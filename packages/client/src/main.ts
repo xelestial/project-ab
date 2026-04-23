@@ -4,6 +4,7 @@
  */
 import gameModes from "./game-modes.json";
 import { ApiClient } from "./api.js";
+import type { TileMetaClient } from "./api.js";
 import { WsClient } from "./ws-client.js";
 import type { GameStateSnapshot } from "./ws-client.js";
 
@@ -75,6 +76,9 @@ let availableUnits: UnitMeta[] = [];
 let selectedMetaId: string | null = null;
 let placedUnits: PlacedUnit[] = [];
 let lastGameState: GameStateSnapshot | null = null;
+
+// Tile metadata cache — loaded once from server, keyed by tileType
+let tileMetas: Map<string, TileMetaClient> = new Map();
 
 // ─── Unit metadata ─────────────────────────────────────────────────────────────
 
@@ -182,26 +186,273 @@ function screenToGrid(
   };
 }
 
+// ─── Tile texture renderers ───────────────────────────────────────────────────
+// Each renderer draws a visual pattern ON TOP of the base fill, within the
+// clipped diamond region.  Only the tile top face is clipped; context is already
+// saved/restored by drawTile.  Coordinates are in canvas-space; the diamond
+// top vertex is at (sx, sy) and the center is at (sx, sy+HH).
+//
+// Adding a new tile type: register a renderer here — no other changes needed.
+// If no renderer is registered, the tile falls back to the base color only.
+
+type TextureRenderer = (
+  ctx: CanvasRenderingContext2D,
+  sx: number, sy: number,
+  HW: number, HH: number,
+) => void;
+
+const TILE_TEXTURE_RENDERERS: Record<string, TextureRenderer> = {
+
+  plain(ctx, sx, sy, HW, HH) {
+    // Subtle grass tufts — short strokes at even intervals
+    ctx.strokeStyle = "rgba(100,200,80,0.45)";
+    ctx.lineWidth = Math.max(1, HW * 0.06);
+    const cx = sx, cy = sy + HH;
+    const step = HW * 0.35;
+    for (let di = -1; di <= 1; di++) {
+      for (let dj = -1; dj <= 1; dj++) {
+        const bx = cx + di * step;
+        const by = cy + dj * (HH * 0.4);
+        ctx.beginPath();
+        ctx.moveTo(bx - HW * 0.06, by + HH * 0.1);
+        ctx.lineTo(bx,             by - HH * 0.22);
+        ctx.moveTo(bx + HW * 0.06, by + HH * 0.1);
+        ctx.lineTo(bx,             by - HH * 0.22);
+        ctx.stroke();
+      }
+    }
+  },
+
+  mountain(ctx, sx, sy, HW, HH) {
+    // Rocky peak — filled dark triangle + light highlight
+    const cx = sx, cy = sy + HH;
+    // Dark rock body
+    ctx.beginPath();
+    ctx.moveTo(cx - HW * 0.55, cy + HH * 0.3);
+    ctx.lineTo(cx,             cy - HH * 0.6);
+    ctx.lineTo(cx + HW * 0.55, cy + HH * 0.3);
+    ctx.closePath();
+    ctx.fillStyle = "rgba(80,80,95,0.7)";
+    ctx.fill();
+    // Snow cap highlight
+    ctx.beginPath();
+    ctx.moveTo(cx - HW * 0.18, cy - HH * 0.28);
+    ctx.lineTo(cx,             cy - HH * 0.6);
+    ctx.lineTo(cx + HW * 0.18, cy - HH * 0.28);
+    ctx.closePath();
+    ctx.fillStyle = "rgba(235,240,255,0.75)";
+    ctx.fill();
+  },
+
+  river(ctx, sx, sy, HW, HH) {
+    // Three sinusoidal wave stripes
+    ctx.strokeStyle = "rgba(100,180,255,0.65)";
+    ctx.lineWidth = Math.max(1, HH * 0.18);
+    ctx.lineCap = "round";
+    for (let i = 0; i < 3; i++) {
+      const baseY = sy + HH * (0.55 + i * 0.35);
+      ctx.beginPath();
+      ctx.moveTo(sx - HW * 0.85, baseY);
+      ctx.bezierCurveTo(
+        sx - HW * 0.4, baseY - HH * 0.18,
+        sx + HW * 0.4, baseY + HH * 0.18,
+        sx + HW * 0.85, baseY,
+      );
+      ctx.stroke();
+    }
+  },
+
+  water(ctx, sx, sy, HW, HH) {
+    // Concentric elliptic ripples
+    const cx = sx, cy = sy + HH;
+    ctx.strokeStyle = "rgba(160,220,255,0.5)";
+    for (let r = 1; r <= 3; r++) {
+      ctx.lineWidth = Math.max(0.5, HH * 0.1);
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, HW * 0.25 * r, HH * 0.25 * r, 0, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+  },
+
+  fire(ctx, sx, sy, HW, HH) {
+    // Three flame arcs from the bottom center
+    const cx = sx, baseY = sy + HH * 1.8;
+    const flames = [
+      { dx: 0,          scale: 1.0,  col: "rgba(255,200,60,0.8)"  },
+      { dx: -HW * 0.28, scale: 0.7,  col: "rgba(255,130,30,0.65)" },
+      { dx:  HW * 0.28, scale: 0.7,  col: "rgba(255,130,30,0.65)" },
+    ];
+    for (const { dx, scale, col } of flames) {
+      const fx = cx + dx;
+      ctx.beginPath();
+      ctx.moveTo(fx, baseY);
+      ctx.bezierCurveTo(
+        fx - HW * 0.2 * scale, baseY - HH * 0.7 * scale,
+        fx + HW * 0.2 * scale, baseY - HH * 1.2 * scale,
+        fx,                    baseY - HH * 1.6 * scale,
+      );
+      ctx.strokeStyle = col;
+      ctx.lineWidth = Math.max(1, HW * 0.18 * scale);
+      ctx.lineCap = "round";
+      ctx.stroke();
+    }
+  },
+
+  sand(ctx, sx, sy, HW, HH) {
+    // Small dots arranged in a loose grid
+    ctx.fillStyle = "rgba(220,190,120,0.55)";
+    const cx = sx, cy = sy + HH;
+    const cols = 5, rows = 4;
+    const r = Math.max(1, HW * 0.055);
+    for (let ri = 0; ri < rows; ri++) {
+      for (let ci = 0; ci < cols; ci++) {
+        const ox = (ci - (cols - 1) / 2) * HW * 0.36 + (ri % 2 === 0 ? 0 : HW * 0.18);
+        const oy = (ri - (rows - 1) / 2) * HH * 0.38;
+        ctx.beginPath();
+        ctx.arc(cx + ox, cy + oy, r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  },
+
+  ice(ctx, sx, sy, HW, HH) {
+    // Six-pointed snowflake
+    const cx = sx, cy = sy + HH;
+    const len = HW * 0.6;
+    ctx.strokeStyle = "rgba(200,240,255,0.8)";
+    ctx.lineWidth = Math.max(1, HW * 0.07);
+    ctx.lineCap = "round";
+    for (let i = 0; i < 6; i++) {
+      const angle = (i * Math.PI) / 3;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.lineTo(cx + Math.cos(angle) * len, cy + Math.sin(angle) * len * 0.5);
+      ctx.stroke();
+      // Small crossbar
+      const bx = cx + Math.cos(angle) * len * 0.55;
+      const by = cy + Math.sin(angle) * len * 0.55 * 0.5;
+      const perp = angle + Math.PI / 2;
+      const bl = len * 0.2;
+      ctx.beginPath();
+      ctx.moveTo(bx + Math.cos(perp) * bl, by + Math.sin(perp) * bl * 0.5);
+      ctx.lineTo(bx - Math.cos(perp) * bl, by - Math.sin(perp) * bl * 0.5);
+      ctx.stroke();
+    }
+  },
+
+  electric(ctx, sx, sy, HW, HH) {
+    // Zigzag lightning bolt top-to-bottom
+    const cx = sx;
+    const top = sy + HH * 0.15, bot = sy + HH * 1.85;
+    const seg = (bot - top) / 4;
+    const pts = [
+      [cx + HW * 0.12,  top],
+      [cx - HW * 0.22,  top + seg],
+      [cx + HW * 0.05,  top + seg * 2],
+      [cx - HW * 0.22,  top + seg * 3],
+      [cx + HW * 0.12,  bot],
+    ] as const;
+    ctx.beginPath();
+    ctx.moveTo(pts[0][0], pts[0][1]);
+    for (const pt of pts.slice(1)) ctx.lineTo(pt[0], pt[1]);
+    ctx.strokeStyle = "rgba(255,240,80,0.9)";
+    ctx.lineWidth = Math.max(1.5, HW * 0.1);
+    ctx.lineJoin = "round";
+    ctx.lineCap = "round";
+    ctx.stroke();
+    // Glow pass
+    ctx.strokeStyle = "rgba(255,255,200,0.4)";
+    ctx.lineWidth = Math.max(3, HW * 0.22);
+    ctx.stroke();
+  },
+
+  acid(ctx, sx, sy, HW, HH) {
+    // Small bubbles (open circles) scattered across the tile
+    ctx.strokeStyle = "rgba(180,255,80,0.7)";
+    ctx.lineWidth = Math.max(0.8, HW * 0.055);
+    const cx = sx, cy = sy + HH;
+    const bubbles = [
+      [-0.38,  0.0,  0.16],
+      [ 0.30, -0.15, 0.12],
+      [ 0.10,  0.32, 0.14],
+      [-0.12, -0.35, 0.10],
+      [ 0.38,  0.30, 0.09],
+    ] as const;
+    for (const [bx, by, br] of bubbles) {
+      ctx.beginPath();
+      ctx.arc(cx + bx * HW, cy + by * HH, br * HW, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+  },
+
+  road(ctx, sx, sy, HW, HH) {
+    // Two parallel lane markings
+    ctx.strokeStyle = "rgba(200,180,140,0.5)";
+    ctx.lineWidth = Math.max(1, HW * 0.07);
+    ctx.setLineDash([HH * 0.3, HH * 0.2]);
+    for (const dx of [-HW * 0.2, HW * 0.2]) {
+      ctx.beginPath();
+      ctx.moveTo(sx + dx - HW * 0.65, sy + HH * 0.55 + (dx > 0 ? HH * 0.45 : -HH * 0.45));
+      ctx.lineTo(sx + dx + HW * 0.65, sy + HH * 1.45 + (dx > 0 ? HH * 0.45 : -HH * 0.45));
+      ctx.stroke();
+    }
+    ctx.setLineDash([]);
+  },
+};
+
+/**
+ * Draw one isometric tile with procedural texture + optional impassable border.
+ *
+ * @param tileType  - tile type key (e.g. "plain", "mountain") — drives texture
+ * @param impassable - when true, draws a reddish diamond outline on top face
+ */
 function drawTile(
   ctx: CanvasRenderingContext2D,
   sx: number, sy: number,
   HW: number, HH: number, DEPTH: number,
   topColor: string, sideColor: string,
+  tileType = "plain",
+  impassable = false,
 ): void {
-  // Top face (diamond)
+  // ── Top face: clip + base fill + procedural texture ───────────────────────
+  ctx.save();
   ctx.beginPath();
   ctx.moveTo(sx, sy);
   ctx.lineTo(sx + HW, sy + HH);
   ctx.lineTo(sx, sy + HH * 2);
   ctx.lineTo(sx - HW, sy + HH);
   ctx.closePath();
+  ctx.clip();
+
+  // Base fill
   ctx.fillStyle = topColor;
-  ctx.fill();
-  ctx.strokeStyle = "rgba(0,0,0,0.25)";
-  ctx.lineWidth = 0.5;
+  ctx.fillRect(sx - HW, sy, HW * 2, HH * 2 + 1);
+
+  // Procedural texture (optional per type)
+  const renderer = TILE_TEXTURE_RENDERERS[tileType];
+  if (renderer !== undefined) {
+    renderer(ctx, sx, sy, HW, HH);
+  }
+
+  ctx.restore();
+
+  // ── Top face outline (impassable = reddish) ───────────────────────────────
+  ctx.beginPath();
+  ctx.moveTo(sx, sy);
+  ctx.lineTo(sx + HW, sy + HH);
+  ctx.lineTo(sx, sy + HH * 2);
+  ctx.lineTo(sx - HW, sy + HH);
+  ctx.closePath();
+  if (impassable) {
+    ctx.strokeStyle = "rgba(220,50,50,0.75)";
+    ctx.lineWidth = Math.max(1.5, HW * 0.05);
+  } else {
+    ctx.strokeStyle = "rgba(0,0,0,0.25)";
+    ctx.lineWidth = 0.5;
+  }
   ctx.stroke();
 
-  // Left side face
+  // ── Left side face ────────────────────────────────────────────────────────
   ctx.beginPath();
   ctx.moveTo(sx - HW, sy + HH);
   ctx.lineTo(sx, sy + HH * 2);
@@ -214,7 +465,7 @@ function drawTile(
   ctx.lineWidth = 0.5;
   ctx.stroke();
 
-  // Right side face
+  // ── Right side face ───────────────────────────────────────────────────────
   ctx.beginPath();
   ctx.moveTo(sx, sy + HH * 2);
   ctx.lineTo(sx + HW, sy + HH);
@@ -306,8 +557,10 @@ interface RenderOpts {
   attackRangeTiles?: Array<{ row: number; col: number }>; // dim red - attack range (no enemy)
   attackTargetTiles?: Array<{ row: number; col: number }>; // bright red - enemy in range
   selectedPos?: { row: number; col: number } | null;     // yellow glow - selected unit
-  availW?: number;   // board-wrap 가용 너비 (동적 타일 크기 계산용)
-  availH?: number;   // board-wrap 가용 높이
+  availW?: number | undefined;   // board-wrap 가용 너비 (동적 타일 크기 계산용)
+  availH?: number | undefined;   // board-wrap 가용 높이
+  /** Tile metadata keyed by tileType — drives impassable border */
+  tileMetas?: Map<string, TileMetaClient> | undefined;
 }
 
 function renderIso(canvas: HTMLCanvasElement, opts: RenderOpts): void {
@@ -347,6 +600,8 @@ function renderIso(canvas: HTMLCanvasElement, opts: RenderOpts): void {
   for (const { row, col } of cells) {
     const key = `${row},${col}`;
     const tileAttr = tiles[key]?.attribute ?? baseTile;
+    const tileMeta = opts.tileMetas?.get(tileAttr);
+    const isImpassable = tileMeta?.impassable ?? false;
     const top = TILE_COLORS[tileAttr] ?? TILE_COLORS["plain"]!;
     const side = TILE_SIDE_COLORS[tileAttr] ?? TILE_SIDE_COLORS["plain"]!;
     const { sx, sy } = gridToScreen(row, col, p.cx, p.cy, p.HW, p.HH);
@@ -357,10 +612,8 @@ function renderIso(canvas: HTMLCanvasElement, opts: RenderOpts): void {
     if (highlightHalf !== undefined) {
       const isMyHalf = highlightHalf === 0 ? row < half : row >= half;
       if (isMyHalf) {
-        // Slightly brighter
         finalTop = `${top}dd`;
       } else {
-        // Dim the other half
         finalTop = `${top}66`;
         finalSide = `${side}66`;
       }
@@ -372,7 +625,7 @@ function renderIso(canvas: HTMLCanvasElement, opts: RenderOpts): void {
       finalSide = side;
     }
 
-    drawTile(ctx, sx, sy, p.HW, p.HH, p.DEPTH, finalTop, finalSide);
+    drawTile(ctx, sx, sy, p.HW, p.HH, p.DEPTH, finalTop, finalSide, tileAttr, isImpassable);
 
     // Move range highlight (blue)
     if (opts.moveTiles?.some(t => t.row === row && t.col === col)) {
@@ -753,6 +1006,7 @@ function renderPlacementCanvas(
     highlightHalf: humanTeamIndex,
     placedUnits,
     hoveredCell,
+    tileMetas,
   });
 
   // Setup interaction (re-attach each render to avoid duplicates)
@@ -998,6 +1252,7 @@ async function fetchAndShowUnitOptions(
       attackRangeTiles: attackRangeHighlights,
       attackTargetTiles: attackTargetHighlights,
       selectedPos: selectedGameUnitPos,
+      tileMetas,
     });
   }
 }
@@ -1189,6 +1444,7 @@ function renderGame(state: GameStateSnapshot): void {
     selectedPos: selectedGameUnitPos,
     availW,
     availH,
+    tileMetas,
   });
 
   renderTurnOrder(state, playerIds);
@@ -1352,6 +1608,7 @@ function setupBoardClick(
           baseTile: state.map.baseTile ?? "plain",
           tiles: state.map.tiles as unknown as Record<string, { attribute: string }>,
           units: unitsArr, playerIds,
+          tileMetas,
         });
       } else {
         void fetchAndShowUnitOptions(clickedUnit.unitId as string, { row, col }, state, gridSize);
@@ -1373,6 +1630,7 @@ function setupBoardClick(
         baseTile: state.map.baseTile ?? "plain",
         tiles: state.map.tiles as unknown as Record<string, { attribute: string }>,
         units: unitsArr, playerIds,
+        tileMetas,
       });
     }
   });
@@ -1658,6 +1916,15 @@ async function tryRestoreSession(): Promise<void> {
 }
 
 void tryRestoreSession();
+
+// ─── 타일 메타데이터 초기 로드 ────────────────────────────────────────────────
+// 서버에서 타일 목록을 한 번만 가져와 tileMetas Map에 저장.
+// impassable 판별 등 렌더링에 사용됨.
+api.fetchTileMetas().then((metas) => {
+  tileMetas = new Map(metas.map((m) => [m.tileType, m]));
+}).catch(() => {
+  // 실패해도 렌더링은 정상 동작 (impassable 테두리만 표시 안 됨)
+});
 
 // ─── 창 크기 변경 시 게임 보드 재렌더링 ───────────────────────────────────────
 // ResizeObserver로 board-wrap 크기 변화를 감지해 캔버스를 즉시 재렌더링

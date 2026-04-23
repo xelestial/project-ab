@@ -102,6 +102,10 @@ export async function registerRoutes(
     maps: registry.getAllMaps(),
   }));
 
+  fastify.get("/api/v1/meta/tiles", async () => ({
+    tiles: registry.getAllTiles(),
+  }));
+
   fastify.get<{ Params: { id: string } }>("/api/v1/meta/units/:id", async (req, reply) => {
     try {
       return registry.getUnit(req.params["id"]);
