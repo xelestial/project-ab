@@ -557,9 +557,11 @@ export async function registerRoutes(
   const ActionBodySchema = z.object({
     playerId: z.string().min(1),
     action: z.object({
-      type: z.enum(["move", "attack", "pass"]),
+      type: z.enum(["move", "attack", "pass", "skill"]),
       unitId: z.string().optional(),
+      skillId: z.string().optional(),
       targetPosition: z.object({ row: z.number().int(), col: z.number().int() }).optional(),
+      sourceTile: z.object({ row: z.number().int(), col: z.number().int() }).optional(),
       targetUnitId: z.string().optional(),
     }),
   });
@@ -619,6 +621,15 @@ export async function registerRoutes(
           type: "attack",
           playerId: playerId as PlayerId,
           unitId,
+          target: action.targetPosition as import("@ab/metadata").Position,
+          sourceTile: action.sourceTile as import("@ab/metadata").Position | undefined,
+        };
+      } else if (action.type === "skill" && action.skillId !== undefined && action.targetPosition !== undefined) {
+        playerAction = {
+          type: "skill",
+          playerId: playerId as PlayerId,
+          unitId,
+          skillId: action.skillId as import("@ab/metadata").MetaId,
           target: action.targetPosition as import("@ab/metadata").Position,
         };
       } else {
