@@ -27,6 +27,8 @@ import type { GameFactory } from "@ab/engine";
 import type { IDataRegistry, PlayerId, UnitId } from "@ab/metadata";
 import type { IStatsStore } from "../session/stats-store.js";
 import { MemoryStatsStore } from "../session/stats-store.js";
+import type { IReplayStore } from "../session/replay-store.js";
+import { MemoryReplayStore } from "../session/replay-store.js";
 import type { ITokenStore } from "../auth/token-store.js";
 import { MemoryTokenStore } from "../auth/token-store.js";
 import { createToken, verifyToken, requireAuth } from "../auth/jwt-auth.js";
@@ -79,12 +81,14 @@ export async function registerRoutes(
     statsStore?: IStatsStore;
     tokenStore?: ITokenStore;
     matchmakingQueue?: MatchmakingQueue;
+    replayStore?: IReplayStore;
   },
 ): Promise<void> {
   const { sessionManager, factory, registry } = deps;
   const statsStore: IStatsStore = deps.statsStore ?? new MemoryStatsStore();
   const tokenStore: ITokenStore = deps.tokenStore ?? new MemoryTokenStore();
   const matchmaking = deps.matchmakingQueue ?? new MatchmakingQueue();
+  const replayStore: IReplayStore = deps.replayStore ?? new MemoryReplayStore();
 
   // ── Health ────────────────────────────────────────────────────────────────
   fastify.get("/health", async () => ({
@@ -424,7 +428,7 @@ export async function registerRoutes(
 
       // Try to start game if all placements + adapters are ready
       const updatedSession = sessionManager.getSession(req.params["gameId"])!;
-      tryStartGame(updatedSession, factory, registry, statsStore, fastify.log);
+      tryStartGame(updatedSession, factory, registry, statsStore, fastify.log, replayStore);
 
       return reply.code(201).send({
         aiPlayerId,
@@ -542,7 +546,7 @@ export async function registerRoutes(
       }
 
       // Try to start game
-      tryStartGame(session, factory, registry, statsStore, fastify.log);
+      tryStartGame(session, factory, registry, statsStore, fastify.log, replayStore);
 
       return reply.code(200).send({
         accepted: true,
@@ -856,6 +860,25 @@ export async function registerRoutes(
       const position = matchmaking.getPosition(playerId);
       const sizes = matchmaking.getQueueSizes();
       return reply.code(200).send({ position, queues: sizes });
+    },
+  );
+
+  // ── Replays (public) ──────────────────────────────────────────────────────
+
+  /**
+   * GET /api/v1/replays/:gameId
+   * Returns the ordered action log for a completed game.
+   * The log can be fed into a ReplayAdapter to reconstruct the game client-side.
+   */
+  fastify.get<{ Params: { gameId: string } }>(
+    "/api/v1/replays/:gameId",
+    async (req, reply) => {
+      const { gameId } = req.params;
+      const entries = await replayStore.getLog(gameId);
+      if (entries === undefined) {
+        return reply.code(404).send({ error: "Replay not found" });
+      }
+      return reply.code(200).send({ gameId, entries, entryCount: entries.length });
     },
   );
 }

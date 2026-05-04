@@ -12,6 +12,7 @@ import type { GameFactory, IEventBus } from "@ab/engine";
 import type { IDataRegistry } from "@ab/metadata";
 import type { IStatsStore } from "../session/stats-store.js";
 import { MemoryStatsStore } from "../session/stats-store.js";
+import type { IReplayStore } from "../session/replay-store.js";
 
 import { HumanAdapter } from "./human-adapter.js";
 import { PassThroughAdapter } from "./passthrough-adapter.js";
@@ -26,10 +27,12 @@ export async function registerWsRoutes(
     factory: GameFactory;
     registry: IDataRegistry;
     statsStore?: IStatsStore;
+    replayStore?: IReplayStore;
   },
 ): Promise<void> {
   const { sessionManager, factory, registry } = deps;
   const statsStore: IStatsStore = deps.statsStore ?? new MemoryStatsStore();
+  const replayStore = deps.replayStore;
 
   fastify.get(
     "/ws/game/:gameId",
@@ -144,7 +147,7 @@ export async function registerWsRoutes(
           // Try to start game if all placements and adapters are ready
           // (Human player's placement is submitted via POST /place; this covers
           //  the edge case where placement arrives before the WS adapter registers)
-          tryStartGame(session, factory, registry, statsStore ?? new MemoryStatsStore(), fastify.log);
+          tryStartGame(session, factory, registry, statsStore, fastify.log, replayStore);
         }
 
         if (msg.type === "spectate") {

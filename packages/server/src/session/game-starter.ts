@@ -8,6 +8,7 @@ import type { PlayerConfig } from "@ab/engine";
 import type { FastifyBaseLogger } from "fastify";
 import type { GameSession } from "./game-session-manager.js";
 import type { IStatsStore } from "./stats-store.js";
+import type { IReplayStore } from "./replay-store.js";
 
 export function tryStartGame(
   session: GameSession,
@@ -15,6 +16,7 @@ export function tryStartGame(
   registry: IDataRegistry,
   statsStore: IStatsStore,
   log: FastifyBaseLogger,
+  replayStore?: IReplayStore,
 ): void {
   if (session.status !== "waiting") return;
 
@@ -82,6 +84,16 @@ export function tryStartGame(
         .catch((err: unknown) => {
           log.error(err, "[game-starter] stats recordResult failed");
         });
+
+      if (replayStore !== undefined) {
+        const entries = session.context.logger.getLog(result.gameId);
+        void replayStore
+          .saveLog(result.gameId, entries)
+          .catch((err: unknown) => {
+            log.error(err, "[game-starter] replayStore saveLog failed");
+          });
+      }
+
       log.info(
         `[game-starter] Game ${gameId} ended — winner: ${result.winnerIds.join(",") || "draw"}`,
       );

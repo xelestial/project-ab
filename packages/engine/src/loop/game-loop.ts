@@ -175,7 +175,7 @@ export class GameLoop implements IGameLoop {
           const result = this.actionProcessor.process(action, state);
 
           if (result.accepted) {
-            this.logger.logAction(action, [], result.newState);
+            this.logger.logAction(action, result.changes, result.newState);
             this.eventBus.emit({
               type: "action.accepted",
               action,

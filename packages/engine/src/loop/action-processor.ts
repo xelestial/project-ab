@@ -2,7 +2,7 @@
  * ActionProcessor — validates + resolves + applies a single player action.
  * Pipeline: TurnManager → Validator → Resolver → StateApplicator → PostProcessor
  */
-import type { GameState, PlayerAction } from "@ab/metadata";
+import type { GameState, PlayerAction, GameChange } from "@ab/metadata";
 import type { IMovementValidator } from "../validators/movement-validator.js";
 import type { IAttackValidator } from "../validators/attack-validator.js";
 import type { IMovementResolver } from "../resolvers/movement-resolver.js";
@@ -20,6 +20,7 @@ export interface ActionResult {
   accepted: boolean;
   errorCode?: string | undefined;
   newState: GameState;
+  changes: GameChange[];
 }
 
 export interface IActionProcessor {
@@ -54,10 +55,10 @@ export class ActionProcessor implements IActionProcessor {
       case "pass":
         return this.processPass(action, state);
       case "draft_place":
-        return { accepted: false, errorCode: ErrorCode.TURN_INVALID_PHASE, newState: state };
+        return { accepted: false, errorCode: ErrorCode.TURN_INVALID_PHASE, newState: state, changes: [] };
       default: {
         const _e: never = action;
-        return { accepted: false, errorCode: ErrorCode.INTERNAL_ERROR, newState: state };
+        return { accepted: false, errorCode: ErrorCode.INTERNAL_ERROR, newState: state, changes: [] };
       }
     }
   }
@@ -70,23 +71,22 @@ export class ActionProcessor implements IActionProcessor {
   ): ActionResult {
     const unit = state.units[action.unitId];
     if (unit === undefined) {
-      return { accepted: false, errorCode: ErrorCode.UNKNOWN_UNIT, newState: state };
+      return { accepted: false, errorCode: ErrorCode.UNKNOWN_UNIT, newState: state, changes: [] };
     }
 
     if (!this.turnManager.isActionAllowed(action.unitId, "move", state)) {
-      return { accepted: false, errorCode: ErrorCode.MOVE_ALREADY_MOVED, newState: state };
+      return { accepted: false, errorCode: ErrorCode.MOVE_ALREADY_MOVED, newState: state, changes: [] };
     }
 
     const validation = this.movementValidator.validateMove(unit, action.destination, state);
     if (!validation.valid) {
-      return { accepted: false, errorCode: validation.errorCode, newState: state };
+      return { accepted: false, errorCode: validation.errorCode, newState: state, changes: [] };
     }
 
     const changes = this.movementResolver.resolve(unit, action.destination, state);
     let newState = this.applicator.apply(changes, state);
 
     // Mark as moved
-    const updatedUnit = newState.units[action.unitId]!;
     newState = this.applicator.apply(
       [{ type: "unit_actions_reset", unitId: action.unitId }],
       newState,
@@ -106,7 +106,7 @@ export class ActionProcessor implements IActionProcessor {
     // Post-move: check deaths
     newState = this.healthManager.applyDeaths(newState);
 
-    return { accepted: true, newState };
+    return { accepted: true, newState, changes };
   }
 
   // ─── Attack ───────────────────────────────────────────────────────────────
@@ -117,17 +117,17 @@ export class ActionProcessor implements IActionProcessor {
   ): ActionResult {
     const unit = state.units[action.unitId];
     if (unit === undefined) {
-      return { accepted: false, errorCode: ErrorCode.UNKNOWN_UNIT, newState: state };
+      return { accepted: false, errorCode: ErrorCode.UNKNOWN_UNIT, newState: state, changes: [] };
     }
 
     if (!this.turnManager.isActionAllowed(action.unitId, "attack", state)) {
-      return { accepted: false, errorCode: ErrorCode.ATTACK_ALREADY_ATTACKED, newState: state };
+      return { accepted: false, errorCode: ErrorCode.ATTACK_ALREADY_ATTACKED, newState: state, changes: [] };
     }
 
     const attackOpts = action.sourceTile !== undefined ? { sourceTile: action.sourceTile } : undefined;
     const validation = this.attackValidator.validateAttack(unit, action.target, state, attackOpts);
     if (!validation.valid) {
-      return { accepted: false, errorCode: validation.errorCode, newState: state };
+      return { accepted: false, errorCode: validation.errorCode, newState: state, changes: [] };
     }
 
     const changes = this.attackResolver.resolve(unit, action.target, state, attackOpts);
@@ -148,7 +148,7 @@ export class ActionProcessor implements IActionProcessor {
     // Post-attack: check deaths
     newState = this.healthManager.applyDeaths(newState);
 
-    return { accepted: true, newState };
+    return { accepted: true, newState, changes };
   }
 
   // ─── Skill ────────────────────────────────────────────────────────────────
@@ -159,11 +159,11 @@ export class ActionProcessor implements IActionProcessor {
   ): ActionResult {
     const unit = state.units[action.unitId];
     if (unit === undefined) {
-      return { accepted: false, errorCode: ErrorCode.UNKNOWN_UNIT, newState: state };
+      return { accepted: false, errorCode: ErrorCode.UNKNOWN_UNIT, newState: state, changes: [] };
     }
 
     if (!this.turnManager.isActionAllowed(action.unitId, "skill", state)) {
-      return { accepted: false, errorCode: ErrorCode.SKILL_ALREADY_USED, newState: state };
+      return { accepted: false, errorCode: ErrorCode.SKILL_ALREADY_USED, newState: state, changes: [] };
     }
 
     const skillMeta = this.registry.getSkill(action.skillId);
@@ -173,7 +173,7 @@ export class ActionProcessor implements IActionProcessor {
       const skillOpts = { overrideWeaponId: skillMeta.weaponId as string };
       const validation = this.attackValidator.validateAttack(unit, action.target, state, skillOpts);
       if (!validation.valid) {
-        return { accepted: false, errorCode: validation.errorCode, newState: state };
+        return { accepted: false, errorCode: validation.errorCode, newState: state, changes: [] };
       }
 
       const changes = this.attackResolver.resolve(unit, action.target, state, skillOpts);
@@ -196,11 +196,11 @@ export class ActionProcessor implements IActionProcessor {
       };
 
       newState = this.healthManager.applyDeaths(newState);
-      return { accepted: true, newState };
+      return { accepted: true, newState, changes };
     }
 
     // Passive skills don't need processing here
-    return { accepted: true, newState: state };
+    return { accepted: true, newState: state, changes: [] };
   }
 
   // ─── Extinguish ───────────────────────────────────────────────────────────
@@ -211,16 +211,16 @@ export class ActionProcessor implements IActionProcessor {
   ): ActionResult {
     const unit = state.units[action.unitId];
     if (unit === undefined) {
-      return { accepted: false, errorCode: ErrorCode.UNKNOWN_UNIT, newState: state };
+      return { accepted: false, errorCode: ErrorCode.UNKNOWN_UNIT, newState: state, changes: [] };
     }
 
     if (!this.turnManager.isActionAllowed(action.unitId, "extinguish", state)) {
-      return { accepted: false, errorCode: ErrorCode.EXTINGUISH_ALREADY_ACTED, newState: state };
+      return { accepted: false, errorCode: ErrorCode.EXTINGUISH_ALREADY_ACTED, newState: state, changes: [] };
     }
 
     const fireEffect = unit.activeEffects.find((e) => e.effectType === "fire");
     if (fireEffect === undefined) {
-      return { accepted: false, errorCode: ErrorCode.EXTINGUISH_NOT_ON_FIRE, newState: state };
+      return { accepted: false, errorCode: ErrorCode.EXTINGUISH_NOT_ON_FIRE, newState: state, changes: [] };
     }
 
     const changes = this.effectResolver.resolveRemove(fireEffect.effectId, unit, "manual_extinguish");
@@ -243,7 +243,7 @@ export class ActionProcessor implements IActionProcessor {
       },
     };
 
-    return { accepted: true, newState };
+    return { accepted: true, newState, changes };
   }
 
   // ─── Pass ─────────────────────────────────────────────────────────────────
@@ -253,6 +253,6 @@ export class ActionProcessor implements IActionProcessor {
     state: GameState,
   ): ActionResult {
     // Pass does nothing — turn manager will advance the turn
-    return { accepted: true, newState: state };
+    return { accepted: true, newState: state, changes: [] };
   }
 }

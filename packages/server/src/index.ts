@@ -26,6 +26,7 @@ import { GameFactory } from "@ab/engine";
 import { GameSessionManager } from "./session/game-session-manager.js";
 import { MemorySessionStore, RedisSessionStore } from "./session/session-store.js";
 import { MemoryStatsStore, PostgresStatsStore } from "./session/stats-store.js";
+import { MemoryReplayStore, PostgresReplayStore } from "./session/replay-store.js";
 import { MemoryTokenStore } from "./auth/token-store.js";
 import { RedisTokenStore } from "./auth/redis-token-store.js";
 import { registerRoutes } from "./api/routes.js";
@@ -98,6 +99,16 @@ function createTokenStore() {
   return new MemoryTokenStore();
 }
 
+function createReplayStore() {
+  const dbUrl = process.env["DATABASE_URL"];
+  if (dbUrl !== undefined && dbUrl !== "") {
+    console.info("[server] Using PostgresReplayStore");
+    return new PostgresReplayStore(dbUrl);
+  }
+  console.info("[server] Using MemoryReplayStore");
+  return new MemoryReplayStore();
+}
+
 // ─── Bootstrap ────────────────────────────────────────────────────────────────
 
 export async function buildServer() {
@@ -112,6 +123,7 @@ export async function buildServer() {
   const statsStore   = createStatsStore();
   const tokenStore   = createTokenStore();
 
+  const replayStore   = createReplayStore();
   const sessionManager = new GameSessionManager(sessionStore);
 
   // Graceful shutdown: close connections before exit
@@ -125,16 +137,19 @@ export async function buildServer() {
     if (tokenStore instanceof RedisTokenStore) {
       await tokenStore.quit().catch(() => {/* ignore */});
     }
+    if (replayStore instanceof PostgresReplayStore) {
+      await replayStore.end().catch(() => {/* ignore */});
+    }
   };
 
   fastify.addHook("onClose", async () => {
     await cleanup();
   });
 
-  const deps = { sessionManager, factory, registry, statsStore, tokenStore };
+  const deps = { sessionManager, factory, registry, statsStore, tokenStore, replayStore };
 
   await registerRoutes(fastify, deps);
-  await registerWsRoutes(fastify, { sessionManager, factory, registry, statsStore });
+  await registerWsRoutes(fastify, { sessionManager, factory, registry, statsStore, replayStore });
 
   return fastify;
 }
