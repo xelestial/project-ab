@@ -10,6 +10,12 @@
       "env": {
         "VITE_SERVER_PORT": "3000"
       }
+    },
+    {
+      "name": "tile-preview",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "http.server", "5175"],
+      "port": 5175
     }
   ]
 }
