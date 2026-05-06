@@ -526,6 +526,51 @@
     }
     #unit-order-submit:hover { opacity: 0.85; }
 
+    /* ── Custom cursor ── */
+    #custom-cursor {
+      position: fixed;
+      z-index: 99999;
+      pointer-events: none;
+      display: none;
+      line-height: 1;
+      user-select: none;
+      filter: drop-shadow(0 2px 6px rgba(0,0,0,0.85));
+    }
+    #custom-cursor.cc-move,
+    #custom-cursor.cc-attack { display: block; font-size: 22px; transform: translate(-50%, -50%); }
+    #custom-cursor.cc-destroy { display: block; transform: translate(-50%, 6px); }
+
+    /* Shoe — slight bounce */
+    @keyframes cc-bounce {
+      0%, 100% { transform: translateY(0) scaleX(-1); }
+      50%       { transform: translateY(-6px) scaleX(-1); }
+    }
+    #custom-cursor.cc-move { animation: cc-bounce 0.55s ease-in-out infinite; }
+
+    /* Crossed swords — quick shake */
+    @keyframes cc-shake {
+      0%, 100% { transform: rotate(0deg); }
+      20%       { transform: rotate(-14deg); }
+      60%       { transform: rotate(14deg); }
+    }
+    #custom-cursor.cc-attack { animation: cc-shake 0.35s ease-in-out infinite; }
+
+    /* Iron ball — swings from cursor point */
+    #custom-cursor.cc-destroy .cc-ball {
+      width: 28px; height: 28px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 33% 28%, #b0b0b0, #1c1c1c 75%);
+      box-shadow: 2px 3px 8px rgba(0,0,0,0.9), inset -2px -2px 5px rgba(0,0,0,0.4);
+      display: block;
+      animation: cc-swing 0.7s ease-in-out infinite;
+      transform-origin: 50% -22px;
+      margin-top: 22px;
+    }
+    @keyframes cc-swing {
+      0%, 100% { transform: rotate(-12deg); }
+      50%       { transform: rotate(12deg); }
+    }
+
     /* ── Util ── */
     .hidden { display: none !important; }
     .tag {
@@ -537,6 +582,9 @@
   </style>
 </head>
 <body>
+  <!-- Custom animated cursor -->
+  <div id="custom-cursor" aria-hidden="true"><span class="cc-ball"></span></div>
+
   <!-- Global hover tooltip -->
   <div id="hover-tooltip"></div>
 
