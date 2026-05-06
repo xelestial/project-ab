@@ -83,22 +83,25 @@ let tileMetas: Map<string, TileMetaClient> = new Map();
 // ─── Unit metadata ─────────────────────────────────────────────────────────────
 
 const UNIT_ABBR: Record<string, string> = {
-  t1: "TK", f1: "FT", r1: "RG",
+  t1: "TK", t2: "TK", f1: "FT", f2: "FT",
+  r1: "RG", r2: "RG", b1: "BR", b2: "BR",
   m1: "MG", k1: "KN", s1: "SP",
 };
 
 const UNIT_NAME_KO: Record<string, string> = {
-  t1: "탱커", f1: "파이터", r1: "레인저",
+  t1: "탱커", t2: "탱커", f1: "파이터", f2: "파이터",
+  r1: "레인저", r2: "레인저", b1: "브루트", b2: "브루트",
   m1: "메이지", k1: "나이트", s1: "서포트",
 };
 
 const UNIT_COLOR: Record<string, string> = {
   tanker: "#5b8dd9", fighter: "#d95b5b", ranger: "#5bd95b",
-  mage: "#9b5bd9", support: "#d9c05b",
+  brute: "#c97a2a", mage: "#9b5bd9", support: "#d9c05b",
 };
 
 const UNIT_EMOJI: Record<string, string> = {
-  t1: "🛡️", f1: "⚔️", r1: "🏹",
+  t1: "🛡️", t2: "🛡️", f1: "⚔️", f2: "⚔️",
+  r1: "🏹", r2: "🏹", b1: "🪓", b2: "🪓",
   m1: "🔮", k1: "⚔️", s1: "💚",
 };
 
@@ -1288,7 +1291,7 @@ function renderUnitInfoPanel(info: UnitInfoData | null): void {
 
   panel.innerHTML = `
     <div class="unit-info-header">
-      <div class="unit-info-icon" style="background:${unitColor}">${UNIT_ABBR[info.metaId] ?? "?"}</div>
+      <div class="unit-info-icon" style="background:${unitColor}">${UNIT_ABBR[info.metaId] ?? info.metaId.slice(0, 2).toUpperCase()}</div>
       <div class="unit-info-title">
         <div class="unit-info-name">${unitName}</div>
         <div class="unit-info-class">${info.class}</div>
@@ -1348,7 +1351,7 @@ function renderTurnOrder(state: GameStateSnapshot, playerIds: string[]): void {
     const unit = slot.unitId ? state.units[slot.unitId] : undefined;
     const pIdx = playerIds.indexOf(slot.playerId);
     const color = PLAYER_COLORS[pIdx >= 0 ? pIdx : 0]!;
-    const abbr = unit ? (UNIT_ABBR[unit.metaId as string] ?? "?") : slot.playerId.slice(0, 2).toUpperCase();
+    const abbr = unit ? (UNIT_ABBR[unit.metaId as string] ?? (unit.metaId as string).slice(0, 2).toUpperCase()) : slot.playerId.slice(0, 2).toUpperCase();
     const isDead = unit ? !unit.alive : false;
     const isCurrent = idx === currentIdx;
     const isPast = idx < currentIdx;
@@ -1462,7 +1465,7 @@ function showHoverTooltip(
   const tip = document.getElementById("hover-tooltip");
   if (!tip) return;
   const name = UNIT_NAME_KO[unit.metaId as string] ?? (unit.metaId as string);
-  const abbr = UNIT_ABBR[unit.metaId as string] ?? "?";
+  const abbr = UNIT_ABBR[unit.metaId as string] ?? (unit.metaId as string).slice(0, 2).toUpperCase();
   const hpPct = Math.max(0, Math.min(100, (unit.currentHealth / 1) * 100)); // approx
   const hpColor = unit.currentHealth > 3 ? "#4caf50" : unit.currentHealth > 1 ? "#ff9800" : "#f44336";
   const actionHint = isAttackable
@@ -1502,6 +1505,28 @@ function setupBoardClick(
 
   newCanvas.style.cursor = isMyTurn ? "pointer" : "default";
 
+  const customCursor = document.getElementById("custom-cursor");
+
+  function setCustomCursor(x: number, y: number, mode: "move" | "attack" | "destroy" | null): void {
+    if (!customCursor) return;
+    if (mode === null) {
+      customCursor.className = "";
+      return;
+    }
+    customCursor.style.left = `${x}px`;
+    customCursor.style.top = `${y}px`;
+    if (mode === "move") {
+      customCursor.textContent = "👟";
+      customCursor.className = "cc-move";
+    } else if (mode === "attack") {
+      customCursor.textContent = "⚔️";
+      customCursor.className = "cc-attack";
+    } else {
+      customCursor.innerHTML = '<span class="cc-ball"></span>';
+      customCursor.className = "cc-destroy";
+    }
+  }
+
   // ── Hover: tooltip + cursor feedback ────────────────────────────────────────
   newCanvas.addEventListener("mousemove", (e) => {
     const rect = newCanvas.getBoundingClientRect();
@@ -1512,6 +1537,7 @@ function setupBoardClick(
 
     if (row < 0 || row >= gridSize || col < 0 || col >= gridSize) {
       hideHoverTooltip();
+      setCustomCursor(0, 0, null);
       newCanvas.style.cursor = isMyTurn ? "pointer" : "default";
       return;
     }
@@ -1523,20 +1549,25 @@ function setupBoardClick(
     const isAttackable = attackTargetHighlights.some(t => t.row === row && t.col === col);
     const isMoveable = moveHighlights.some(t => t.row === row && t.col === col);
 
-    if (hoveredUnit) {
-      showHoverTooltip(e.clientX, e.clientY, hoveredUnit, isAttackable && isMyTurn, false);
-      newCanvas.style.cursor = isAttackable && isMyTurn ? "crosshair" : "pointer";
+    if (isAttackable && isMyTurn) {
+      showHoverTooltip(e.clientX, e.clientY, hoveredUnit!, true, false);
+      setCustomCursor(e.clientX, e.clientY, "attack");
+      newCanvas.style.cursor = "none";
     } else if (isMoveable && isMyTurn) {
       hideHoverTooltip();
-      newCanvas.style.cursor = "pointer";
+      setCustomCursor(e.clientX, e.clientY, "move");
+      newCanvas.style.cursor = "none";
     } else {
-      hideHoverTooltip();
-      newCanvas.style.cursor = isMyTurn ? "default" : "default";
+      if (hoveredUnit) showHoverTooltip(e.clientX, e.clientY, hoveredUnit, false, false);
+      else hideHoverTooltip();
+      setCustomCursor(0, 0, null);
+      newCanvas.style.cursor = hoveredUnit ? "pointer" : (isMyTurn ? "default" : "default");
     }
   });
 
   newCanvas.addEventListener("mouseleave", () => {
     hideHoverTooltip();
+    setCustomCursor(0, 0, null);
   });
 
   newCanvas.addEventListener("click", (e) => {
@@ -1590,8 +1621,7 @@ function setupBoardClick(
     if (clickedUnit && clickedUnit.playerId === humanPlayerId) {
       const currentSlot = state.turnOrder[state.currentTurnIndex];
       if (currentSlot?.unitId && clickedUnit.unitId !== currentSlot.unitId) {
-        // Clicked a different own unit — show info only, no action
-        void fetchAndShowUnitOptions(clickedUnit.unitId as string, { row, col }, state, gridSize);
+        // Clicked a different own unit — info already shown above; do not change selection
         return;
       }
       if (selectedUnitId === clickedUnit.unitId) {
