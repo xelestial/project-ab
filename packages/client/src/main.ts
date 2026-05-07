@@ -83,14 +83,16 @@ let tileMetas: Map<string, TileMetaClient> = new Map();
 // ─── Unit metadata ─────────────────────────────────────────────────────────────
 
 const UNIT_ABBR: Record<string, string> = {
-  t1: "TK", t2: "TK", f1: "FT", f2: "FT",
-  r1: "RG", r2: "RG", b1: "BR", b2: "BR",
+  t1: "TK", t2: "TK", t3: "TK", f1: "FT", f2: "FT", f3: "FT", f4: "FT",
+  r1: "RG", r2: "RG", r3: "RG", r4: "RG", b1: "BR", b2: "BR", b3: "BR", b4: "BR",
   m1: "MG", k1: "KN", s1: "SP",
 };
 
 const UNIT_NAME_KO: Record<string, string> = {
-  t1: "탱커", t2: "탱커", f1: "파이터", f2: "파이터",
-  r1: "레인저", r2: "레인저", b1: "브루트", b2: "브루트",
+  t1: "탱커1", t2: "탱커2", t3: "탱커3",
+  f1: "파이터1", f2: "파이터2", f3: "파이터3", f4: "파이터4",
+  r1: "레인저1", r2: "레인저2", r3: "레인저3", r4: "레인저4",
+  b1: "브루트1", b2: "브루트2", b3: "브루트3", b4: "브루트4",
   m1: "메이지", k1: "나이트", s1: "서포트",
 };
 
@@ -161,9 +163,12 @@ function isoParams(
   const HH = TH / 2;
   const DEPTH = Math.round(TH * 0.4);
   const canvasW = gridSize * TW + TW;
-  const canvasH = gridSize * TH + TH + DEPTH + TH;
+  // Extra top padding so sprites at row-0 don't overflow above the canvas.
+  // Sprite height = HW * 3.5; tiles at row-0 start at cy, so reserve that much.
+  const spriteTopPad = Math.round(HW * 3.5);
+  const canvasH = gridSize * TH + TH + DEPTH + TH + spriteTopPad;
   const cx = canvasW / 2;
-  const cy = HH + 4;
+  const cy = HH + 4 + spriteTopPad;
   return { TW, TH, HW, HH, DEPTH, cx, cy, canvasW, canvasH };
 }
 
@@ -529,6 +534,7 @@ function drawUnit(
   color: string, abbr: string, dead: boolean,
   metaId?: string,
   direction: "front-left" | "front-right" | "back-left" | "back-right" = "front-left",
+  unitName: string = "",
 ): void {
   const cx = sx;
   const cy = sy + HH + DEPTH / 2;
@@ -540,30 +546,64 @@ function drawUnit(
   const path = metaId !== undefined ? spritePath(metaId, direction) : null;
   const spriteImg = path !== null ? loadSprite(path) : null;
 
+  // Feet anchored at front vertex of tile top face (sx, sy + HH*2)
+  const feetY = sy + HH * 2;
+
   if (spriteImg !== null && spriteImg.complete && spriteImg.naturalWidth > 0) {
-    // Sprite: 404×1008 full body. Scale to ~3.5× tile half-width so character
-    // stands visibly above the tile regardless of TW.
     const spriteH = HW * 3.5;
     const spriteW = spriteH * (404 / 1008);
     const drawX = cx - spriteW / 2;
-    const drawY = sy - spriteH * 0.62; // anchor: feet sit near tile front edge
+    const drawY = feetY - spriteH; // feet at bottom of sprite
 
-    // Shadow ellipse
+    // Shadow ellipse at feet
     ctx.beginPath();
-    ctx.ellipse(cx, sy + HH * 0.9, r * 0.7, r * 0.22, 0, 0, Math.PI * 2);
+    ctx.ellipse(cx, feetY - HH * 0.3, r * 0.7, r * 0.22, 0, 0, Math.PI * 2);
     ctx.fillStyle = "rgba(0,0,0,0.35)";
     ctx.fill();
 
     ctx.drawImage(spriteImg, drawX, drawY, spriteW, spriteH);
+
+    // Team colour badge: pill above sprite head with class initial + unit name
+    const badgeY = drawY - 4;
+    const fontSize = Math.max(9, Math.round(HW * 0.45));
+    ctx.font = `bold ${fontSize}px "Segoe UI", sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "bottom";
+    const label = `${abbr} ${unitName}`;
+    const tw = ctx.measureText(label).width;
+    const padX = fontSize * 0.5;
+    const padY = fontSize * 0.3;
+    const bw = tw + padX * 2;
+    const bh = fontSize + padY * 2;
+    const bx = cx - bw / 2;
+    const by = badgeY - bh;
+    const rad = bh / 2;
+    ctx.beginPath();
+    ctx.moveTo(bx + rad, by);
+    ctx.lineTo(bx + bw - rad, by);
+    ctx.arcTo(bx + bw, by, bx + bw, by + bh, rad);
+    ctx.lineTo(bx + bw, by + bh - rad);
+    ctx.arcTo(bx + bw, by + bh, bx + bw - rad, by + bh, rad);
+    ctx.lineTo(bx + rad, by + bh);
+    ctx.arcTo(bx, by + bh, bx, by + bh - rad, rad);
+    ctx.lineTo(bx, by + rad);
+    ctx.arcTo(bx, by, bx + rad, by, rad);
+    ctx.closePath();
+    ctx.fillStyle = color;
+    ctx.globalAlpha = dead ? 0.25 : 0.88;
+    ctx.fill();
+    ctx.globalAlpha = dead ? 0.25 : 1;
+    ctx.fillStyle = "#fff";
+    ctx.fillText(label, cx, by + bh - padY * 0.5);
   } else {
     // Fallback: colored circle + abbreviation
     ctx.beginPath();
-    ctx.ellipse(cx, cy + r * 0.2, r * 0.7, r * 0.25, 0, 0, Math.PI * 2);
+    ctx.ellipse(cx, feetY - HH * 0.2, r * 0.7, r * 0.25, 0, 0, Math.PI * 2);
     ctx.fillStyle = "rgba(0,0,0,0.4)";
     ctx.fill();
 
     ctx.beginPath();
-    ctx.arc(cx, cy - r * 0.3, r, 0, Math.PI * 2);
+    ctx.arc(cx, feetY - HH - r, r, 0, Math.PI * 2);
     ctx.fillStyle = color;
     ctx.fill();
     ctx.strokeStyle = "rgba(255,255,255,0.5)";
@@ -574,7 +614,7 @@ function drawUnit(
     ctx.font = `bold ${Math.round(r * 0.75)}px "Segoe UI", sans-serif`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText(abbr, cx, cy - r * 0.3);
+    ctx.fillText(abbr, cx, feetY - HH - r);
   }
 
   ctx.globalAlpha = 1;
@@ -752,7 +792,7 @@ function renderIso(canvas: HTMLCanvasElement, opts: RenderOpts): void {
     // Draw placed unit (placement phase)
     const placedMetaId = placedByPos.get(key);
     if (placedMetaId !== undefined) {
-      drawUnit(ctx, sx, sy, p.HW, p.HH, p.DEPTH, "#888", UNIT_ABBR[placedMetaId] ?? "??", false, placedMetaId, "front-left");
+      drawUnit(ctx, sx, sy, p.HW, p.HH, p.DEPTH, "#888", UNIT_ABBR[placedMetaId] ?? "??", false, placedMetaId, "front-left", UNIT_NAME_KO[placedMetaId] ?? placedMetaId);
     }
 
     // Draw actual game unit
@@ -763,7 +803,7 @@ function renderIso(canvas: HTMLCanvasElement, opts: RenderOpts): void {
       const abbr = UNIT_ABBR[unit.metaId] ?? unit.metaId.slice(0, 2).toUpperCase();
       // Team 0 faces front-right (toward enemy), team 1 faces front-left
       const dir = pIdx === 0 ? "front-right" : "front-left";
-      drawUnit(ctx, sx, sy, p.HW, p.HH, p.DEPTH, color, abbr, !unit.alive, unit.metaId, dir);
+      drawUnit(ctx, sx, sy, p.HW, p.HH, p.DEPTH, color, abbr, !unit.alive, unit.metaId, dir, UNIT_NAME_KO[unit.metaId] ?? unit.metaId);
     }
   }
 }
@@ -1334,6 +1374,7 @@ function renderUnitInfoPanel(info: UnitInfoData | null): void {
   const panel = document.getElementById("unit-info-panel");
   if (!panel) return;
   if (info === null) {
+    panel.classList.remove("visible");
     panel.innerHTML = '<div class="unit-info-empty">유닛을 클릭하면 정보가 표시됩니다</div>';
     return;
   }
@@ -1392,6 +1433,7 @@ function renderUnitInfoPanel(info: UnitInfoData | null): void {
     <div class="unit-info-effects">${effectsHtml}</div>
     <div class="unit-info-actions">${actionsHtml}</div>
   `;
+  panel.classList.add("visible");
 }
 
 async function submitAction(action: {
@@ -1422,29 +1464,163 @@ function renderTurnOrder(state: GameStateSnapshot, playerIds: string[]): void {
   const turnOrder = state.turnOrder;
   const currentIdx = state.currentTurnIndex;
 
+  // Group slots by player team boundary to add dividers
+  let lastPIdx = -1;
+
   turnOrder.forEach((slot, idx) => {
     const unit = slot.unitId ? state.units[slot.unitId] : undefined;
     const pIdx = playerIds.indexOf(slot.playerId);
     const color = PLAYER_COLORS[pIdx >= 0 ? pIdx : 0]!;
-    const abbr = unit ? (UNIT_ABBR[unit.metaId as string] ?? (unit.metaId as string).slice(0, 2).toUpperCase()) : slot.playerId.slice(0, 2).toUpperCase();
+    const metaId = unit ? (unit.metaId as string) : "";
+    const abbr = metaId ? (UNIT_ABBR[metaId] ?? metaId.slice(0, 2).toUpperCase()) : slot.playerId.slice(0, 2).toUpperCase();
+    const unitName = metaId ? (UNIT_NAME_KO[metaId] ?? metaId) : slot.playerId.slice(0, 8);
     const isDead = unit ? !unit.alive : false;
     const isCurrent = idx === currentIdx;
     const isPast = idx < currentIdx;
 
-    const item = document.createElement("div");
-    item.className = `turn-slot ${isCurrent ? "turn-slot-active" : ""} ${isPast ? "turn-slot-past" : ""} ${isDead ? "turn-slot-dead" : ""}`;
-    item.style.borderColor = color;
-    item.style.backgroundColor = isCurrent ? color : "transparent";
-    item.innerHTML = `
-      <div class="turn-slot-abbr" style="color:${isCurrent ? "#fff" : color}">${abbr}</div>
-      ${isCurrent ? '<div class="turn-slot-arrow">&#9660;</div>' : ""}
+    // Team boundary divider
+    if (pIdx !== lastPIdx && idx > 0) {
+      const div = document.createElement("div");
+      div.className = "hud-divider";
+      bar.appendChild(div);
+    }
+    lastPIdx = pIdx;
+
+    // HP calculation
+    const meta = availableUnits.find(m => m.id === metaId);
+    const maxHp = meta?.baseHealth ?? 1;
+    const curHp = unit?.currentHealth ?? 0;
+    const hpPct = isDead ? 0 : Math.max(0, Math.min(100, (curHp / maxHp) * 100));
+    const hpColor = hpPct > 60 ? "#4caf50" : hpPct > 30 ? "#ff9800" : "#f44336";
+
+    // Portrait
+    const portrait = metaId ? portraitPath(metaId) : null;
+    const portraitHtml = portrait
+      ? `<img src="${portrait}" alt="${unitName}" />`
+      : `<div class="huc-portrait-fallback" style="color:${color}">${abbr}</div>`;
+
+    // Active effects
+    const effectsHtml = (unit?.actionsUsed)
+      ? [
+          unit.actionsUsed.moved ? `<span class="huc-effect">이동↑</span>` : "",
+          unit.actionsUsed.attacked ? `<span class="huc-effect">공격↑</span>` : "",
+        ].filter(Boolean).join("") || ""
+      : "";
+
+    const card = document.createElement("div");
+    card.className = [
+      "hud-unit-card",
+      isCurrent ? "huc-active" : "",
+      isPast ? "huc-past" : "",
+      isDead ? "huc-dead" : "",
+    ].filter(Boolean).join(" ");
+    card.style.setProperty("--team-color", color);
+    card.dataset["unitId"] = slot.unitId ?? "";
+    card.dataset["metaId"] = metaId;
+    card.dataset["playerId"] = slot.playerId;
+
+    card.innerHTML = `
+      ${isCurrent ? '<div class="huc-active-arrow">▼</div>' : ""}
+      <div class="huc-portrait">${portraitHtml}</div>
+      <div class="huc-body">
+        <div class="huc-name">${unitName}</div>
+        <div class="huc-hp-row">
+          <div class="huc-hp-bar"><div class="huc-hp-fill" style="width:${hpPct}%;background:${hpColor}"></div></div>
+          <div class="huc-hp-text">${isDead ? "☠" : curHp}</div>
+        </div>
+        <div class="huc-effects">${effectsHtml}</div>
+      </div>
     `;
 
-    // Tooltip
-    item.title = `${slot.playerId.slice(0, 12)}${unit ? ` — ${UNIT_NAME_KO[unit.metaId as string] ?? unit.metaId}` : ""}`;
+    // Hover: show detail overlay
+    card.addEventListener("mouseenter", (e) => showUnitHoverPanel(e, slot.unitId ?? "", state, playerIds));
+    card.addEventListener("mousemove", (e) => repositionHoverPanel(e));
+    card.addEventListener("mouseleave", () => hideUnitHoverPanel());
 
-    bar.appendChild(item);
+    bar.appendChild(card);
   });
+}
+
+function showUnitHoverPanel(
+  e: MouseEvent,
+  unitId: string,
+  state: GameStateSnapshot,
+  playerIds: string[],
+): void {
+  const panel = document.getElementById("unit-hover-panel");
+  if (!panel || !unitId) return;
+  const unit = state.units[unitId];
+  if (!unit) return;
+
+  const metaId = unit.metaId as string;
+  const pIdx = playerIds.indexOf(unit.playerId as string);
+  const color = PLAYER_COLORS[pIdx >= 0 ? pIdx : 0]!;
+  const unitName = UNIT_NAME_KO[metaId] ?? metaId;
+  const abbr = UNIT_ABBR[metaId] ?? metaId.slice(0, 2).toUpperCase();
+  const meta = availableUnits.find(m => m.id === metaId);
+  const maxHp = meta?.baseHealth ?? 1;
+  const hpPct = unit.alive ? Math.max(0, Math.min(100, (unit.currentHealth / maxHp) * 100)) : 0;
+  const hpColor = hpPct > 60 ? "#4caf50" : hpPct > 30 ? "#ff9800" : "#f44336";
+
+  const portrait = portraitPath(metaId);
+  const portraitHtml = portrait
+    ? `<img src="${portrait}" alt="${unitName}" />`
+    : `<div style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;color:${color};font-weight:700;font-size:16px">${abbr}</div>`;
+
+  const effectsHtml = unit.actionsUsed
+    ? [
+        unit.actionsUsed.moved ? `<span class="uhp-effect">이동 완료</span>` : "",
+        unit.actionsUsed.attacked ? `<span class="uhp-effect">공격 완료</span>` : "",
+        unit.actionsUsed.skillUsed ? `<span class="uhp-effect">스킬 사용</span>` : "",
+      ].filter(Boolean).join("") || `<span class="uhp-no-effects">행동 가능</span>`
+    : `<span class="uhp-no-effects">—</span>`;
+
+  panel.innerHTML = `
+    <div class="uhp-header">
+      <div class="uhp-portrait" style="border-left:3px solid ${color}">${portraitHtml}</div>
+      <div class="uhp-title">
+        <div class="uhp-name" style="color:${color}">${unitName}</div>
+        <div class="uhp-class">${meta?.class ?? "—"} · ${unit.playerId.slice(0, 12)}</div>
+      </div>
+    </div>
+    <div class="uhp-section">
+      <div class="uhp-hp-row">
+        <div class="uhp-hp-bar"><div class="uhp-hp-fill" style="width:${hpPct}%;background:${hpColor}"></div></div>
+        <div class="uhp-hp-text">HP ${unit.currentHealth} / ${maxHp}</div>
+      </div>
+      <div class="uhp-stats">
+        <div class="uhp-stat"><span class="uhp-stat-label">ARM</span><span class="uhp-stat-val">${unit.currentArmor}</span></div>
+        <div class="uhp-stat"><span class="uhp-stat-label">BASE</span><span class="uhp-stat-val">${meta?.baseArmor ?? "—"}</span></div>
+        <div class="uhp-stat"><span class="uhp-stat-label">MOV</span><span class="uhp-stat-val">${meta?.baseMovement ?? "—"}</span></div>
+        <div class="uhp-stat"><span class="uhp-stat-label">POS</span><span class="uhp-stat-val">${unit.position.row},${unit.position.col}</span></div>
+      </div>
+    </div>
+    <div class="uhp-section">
+      <div class="uhp-effects">${effectsHtml}</div>
+    </div>
+  `;
+
+  repositionHoverPanel(e);
+  panel.classList.add("visible");
+}
+
+function repositionHoverPanel(e: MouseEvent): void {
+  const panel = document.getElementById("unit-hover-panel");
+  if (!panel) return;
+  const pw = panel.offsetWidth || 240;
+  const ph = panel.offsetHeight || 180;
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  let left = e.clientX + 12;
+  let top = e.clientY - ph - 8;
+  if (left + pw > vw - 8) left = e.clientX - pw - 12;
+  if (top < 8) top = e.clientY + 16;
+  panel.style.left = `${left}px`;
+  panel.style.top = `${top}px`;
+}
+
+function hideUnitHoverPanel(): void {
+  document.getElementById("unit-hover-panel")?.classList.remove("visible");
 }
 
 // ─── Game rendering ───────────────────────────────────────────────────────────
