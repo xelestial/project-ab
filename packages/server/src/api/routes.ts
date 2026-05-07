@@ -359,6 +359,9 @@ export async function registerRoutes(
         },
       };
 
+      // Persist updated player list to store so GET /rooms shows correct joinedPlayerCount
+      await sessionManager.updateState(session.gameId, session.state);
+
       return reply.code(201).send({ playerId, teamIndex });
     },
   );
@@ -423,6 +426,9 @@ export async function registerRoutes(
       };
 
       sessionManager.addAdapter(req.params["gameId"], adapter);
+
+      // Persist updated player list so GET /rooms shows correct joinedPlayerCount
+      await sessionManager.updateState(req.params["gameId"], session.state);
 
       // Auto-generate placement for AI
       // Read occupied tiles from in-memory placements (already synced from store)

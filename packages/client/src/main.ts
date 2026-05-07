@@ -71,12 +71,13 @@ const ws = new WsClient();
 let currentMode: GameMode | null = null;
 let seatTypes: ("human" | "ai")[] = [];
 
-// Persist player ID across page refreshes — generates once, then reuses from localStorage
-let humanPlayerId: string = localStorage.getItem("ab_player_id") ??
+// Player ID: per-tab (sessionStorage) so multiple browser tabs can be separate players.
+// Game session ID: also per-tab so each tab tracks its own active game.
+let humanPlayerId: string = sessionStorage.getItem("ab_player_id") ??
   `player_${Math.random().toString(36).slice(2, 8)}`;
-localStorage.setItem("ab_player_id", humanPlayerId);
+sessionStorage.setItem("ab_player_id", humanPlayerId);
 
-let currentGameId: string | null = localStorage.getItem("ab_game_id");
+let currentGameId: string | null = sessionStorage.getItem("ab_game_id");
 let humanTeamIndex = 0;
 let logEntries: string[] = [];
 let availableUnits: UnitMeta[] = [];
@@ -1080,12 +1081,25 @@ async function joinExistingRoom(gameId: string, mapId: string): Promise<void> {
   statusEl.className = "status-msg";
 
   try {
-    const mode = (gameModes.modes as GameMode[]).find((m) => m.mapId === mapId);
-    if (!mode) throw new Error(`알 수 없는 맵: ${mapId}`);
+    // Resolve mapId: if missing (old server format), fetch from room details
+    let resolvedMapId = mapId;
+    if (!resolvedMapId) {
+      const token = api.getToken();
+      const res = await fetch(`${API_BASE}/api/v1/rooms/${gameId}`, {
+        headers: { Authorization: `Bearer ${token ?? ""}` },
+      });
+      if (res.ok) {
+        const data = (await res.json()) as { state?: { map?: { mapId?: string } } };
+        resolvedMapId = data.state?.map?.mapId ?? "";
+      }
+    }
+
+    const mode = (gameModes.modes as GameMode[]).find((m) => m.mapId === resolvedMapId);
+    if (!mode) throw new Error(`알 수 없는 맵: ${resolvedMapId || gameId}`);
 
     currentMode = mode;
     currentGameId = gameId;
-    localStorage.setItem("ab_game_id", gameId);
+    sessionStorage.setItem("ab_game_id", gameId);
 
     const joinRes = await api.joinRoom(gameId, humanPlayerId);
     humanTeamIndex = joinRes.teamIndex;
@@ -1163,7 +1177,7 @@ async function startGame(): Promise<void> {
       playerCount: currentMode.playerCount,
     });
     currentGameId = room.gameId;
-    localStorage.setItem("ab_game_id", room.gameId);
+    sessionStorage.setItem("ab_game_id", room.gameId);
     addLog(`게임 생성: ${room.gameId}`);
 
     const hasHuman = seatTypes.some((t) => t === "human");
@@ -2362,7 +2376,7 @@ document.getElementById("lobby-back")?.addEventListener("click", () => {
   stopPolling();
   ws.disconnect();
   currentGameId = null;
-  localStorage.removeItem("ab_game_id");
+  sessionStorage.removeItem("ab_game_id");
   // Re-enable the start button so a new game can be created next time
   const startBtn = document.getElementById("start-btn") as HTMLButtonElement | null;
   if (startBtn) startBtn.disabled = false;
@@ -2386,7 +2400,7 @@ document.getElementById("back-to-menu-btn")?.addEventListener("click", () => {
   stopPolling();
   ws.disconnect();
   currentGameId = null;
-  localStorage.removeItem("ab_game_id");
+  sessionStorage.removeItem("ab_game_id");
   logEntries = [];
   placedUnits = [];
   renderLog();
@@ -2397,7 +2411,7 @@ document.getElementById("back-to-menu-btn")?.addEventListener("click", () => {
 // ─── Session restore on page load ─────────────────────────────────────────────
 
 async function tryRestoreSession(): Promise<void> {
-  const savedGameId = localStorage.getItem("ab_game_id");
+  const savedGameId = sessionStorage.getItem("ab_game_id");
   if (!savedGameId) return;
 
   const token = api.getToken();
@@ -2405,7 +2419,7 @@ async function tryRestoreSession(): Promise<void> {
   try {
     await api.login(humanPlayerId);
   } catch {
-    localStorage.removeItem("ab_game_id");
+    sessionStorage.removeItem("ab_game_id");
     return;
   }
 
@@ -2415,12 +2429,12 @@ async function tryRestoreSession(): Promise<void> {
       headers: { Authorization: `Bearer ${api.getToken()}` },
     });
     if (!res.ok) {
-      localStorage.removeItem("ab_game_id");
+      sessionStorage.removeItem("ab_game_id");
       return;
     }
     const data = (await res.json()) as { status: string; state: GameStateSnapshot };
     if (data.status === "ended" || data.state?.phase === "result") {
-      localStorage.removeItem("ab_game_id");
+      sessionStorage.removeItem("ab_game_id");
       return;
     }
 
@@ -2449,7 +2463,7 @@ async function tryRestoreSession(): Promise<void> {
     pollGameState(savedGameId);
     addLog(`세션 복원: ${savedGameId}`);
   } catch {
-    localStorage.removeItem("ab_game_id");
+    sessionStorage.removeItem("ab_game_id");
   }
 }
 
