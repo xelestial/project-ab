@@ -482,11 +482,53 @@ function drawTile(
   ctx.stroke();
 }
 
+// ─── Sprite image cache ────────────────────────────────────────────────────────
+
+const _spriteCache = new Map<string, HTMLImageElement>();
+let _spriteOnLoad: (() => void) | null = null;
+
+function loadSprite(src: string): HTMLImageElement {
+  let img = _spriteCache.get(src);
+  if (img === undefined) {
+    img = new Image();
+    img.onload = () => { _spriteOnLoad?.(); };
+    img.src = src;
+    _spriteCache.set(src, img);
+  }
+  return img;
+}
+
+/** Preload all unit sprites in the background. */
+function preloadSprites(): void {
+  const units = ["b1","b2","b3","b4","f1","f2","f3","f4","r1","r2","r3","r4","t1","t2","t3"];
+  const dirs = ["front-left", "front-right", "back-left", "back-right"] as const;
+  for (const u of units) {
+    loadSprite(`/sprites/portraits/${u}.png`);
+    for (const d of dirs) loadSprite(`/sprites/units/${u}-${d}.png`);
+  }
+}
+
+/** Returns the sprite path for a unit+direction, or null if no sprite exists. */
+function spritePath(metaId: string, direction: "front-left" | "front-right" | "back-left" | "back-right"): string | null {
+  const SPRITE_UNITS = new Set(["b1","b2","b3","b4","f1","f2","f3","f4","r1","r2","r3","r4","t1","t2","t3"]);
+  if (!SPRITE_UNITS.has(metaId)) return null;
+  return `/sprites/units/${metaId}-${direction}.png`;
+}
+
+/** Portrait path for unit selection / info panel. */
+function portraitPath(metaId: string): string | null {
+  const PORTRAIT_UNITS = new Set(["b1","b2","b3","b4","f1","f2","f3","f4","r1","r2","r3","r4","t1","t2","t3"]);
+  if (!PORTRAIT_UNITS.has(metaId)) return null;
+  return `/sprites/portraits/${metaId}.png`;
+}
+
 function drawUnit(
   ctx: CanvasRenderingContext2D,
   sx: number, sy: number,
   HW: number, HH: number, DEPTH: number,
   color: string, abbr: string, dead: boolean,
+  metaId?: string,
+  direction: "front-left" | "front-right" | "back-left" | "back-right" = "front-left",
 ): void {
   const cx = sx;
   const cy = sy + HH + DEPTH / 2;
@@ -494,27 +536,47 @@ function drawUnit(
 
   ctx.globalAlpha = dead ? 0.25 : 1;
 
-  // Shadow
-  ctx.beginPath();
-  ctx.ellipse(cx, cy + r * 0.2, r * 0.7, r * 0.25, 0, 0, Math.PI * 2);
-  ctx.fillStyle = "rgba(0,0,0,0.4)";
-  ctx.fill();
+  // Try sprite first
+  const path = metaId !== undefined ? spritePath(metaId, direction) : null;
+  const spriteImg = path !== null ? loadSprite(path) : null;
 
-  // Circle body
-  ctx.beginPath();
-  ctx.arc(cx, cy - r * 0.3, r, 0, Math.PI * 2);
-  ctx.fillStyle = color;
-  ctx.fill();
-  ctx.strokeStyle = "rgba(255,255,255,0.5)";
-  ctx.lineWidth = 1;
-  ctx.stroke();
+  if (spriteImg !== null && spriteImg.complete && spriteImg.naturalWidth > 0) {
+    // Original sprite: 404x1008, full body
+    // Draw the bottom 55% of the sprite (legs crop) anchored to tile top
+    // We show full sprite scaled to fit tile height × 2.2 (character stands ~2 tiles tall)
+    const spriteH = HH * 2.8;
+    const spriteW = spriteH * (404 / 1008);
+    const drawX = cx - spriteW / 2;
+    const drawY = sy - spriteH * 0.55; // anchor: feet align to tile bottom
 
-  // Abbreviation
-  ctx.fillStyle = "#fff";
-  ctx.font = `bold ${Math.round(r * 0.75)}px "Segoe UI", sans-serif`;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText(abbr, cx, cy - r * 0.3);
+    // Shadow ellipse
+    ctx.beginPath();
+    ctx.ellipse(cx, sy + HH * 0.9, r * 0.7, r * 0.22, 0, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(0,0,0,0.35)";
+    ctx.fill();
+
+    ctx.drawImage(spriteImg, drawX, drawY, spriteW, spriteH);
+  } else {
+    // Fallback: colored circle + abbreviation
+    ctx.beginPath();
+    ctx.ellipse(cx, cy + r * 0.2, r * 0.7, r * 0.25, 0, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(0,0,0,0.4)";
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.arc(cx, cy - r * 0.3, r, 0, Math.PI * 2);
+    ctx.fillStyle = color;
+    ctx.fill();
+    ctx.strokeStyle = "rgba(255,255,255,0.5)";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    ctx.fillStyle = "#fff";
+    ctx.font = `bold ${Math.round(r * 0.75)}px "Segoe UI", sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(abbr, cx, cy - r * 0.3);
+  }
 
   ctx.globalAlpha = 1;
 }
@@ -567,6 +629,9 @@ interface RenderOpts {
 }
 
 function renderIso(canvas: HTMLCanvasElement, opts: RenderOpts): void {
+  // Re-render this canvas when a pending sprite finishes loading
+  _spriteOnLoad = () => renderIso(canvas, opts);
+
   const { gridSize, tiles = {}, units = [], playerIds = [], highlightHalf, placedUnits: placed = [] } = opts;
   const baseTile = opts.baseTile ?? "plain";
   const p = isoParams(gridSize, opts.availW, opts.availH);
@@ -688,7 +753,7 @@ function renderIso(canvas: HTMLCanvasElement, opts: RenderOpts): void {
     // Draw placed unit (placement phase)
     const placedMetaId = placedByPos.get(key);
     if (placedMetaId !== undefined) {
-      drawUnit(ctx, sx, sy, p.HW, p.HH, p.DEPTH, "#888", UNIT_ABBR[placedMetaId] ?? "??", false);
+      drawUnit(ctx, sx, sy, p.HW, p.HH, p.DEPTH, "#888", UNIT_ABBR[placedMetaId] ?? "??", false, placedMetaId, "front-left");
     }
 
     // Draw actual game unit
@@ -697,7 +762,9 @@ function renderIso(canvas: HTMLCanvasElement, opts: RenderOpts): void {
       const pIdx = playerIds.indexOf(unit.playerId);
       const color = PLAYER_COLORS[pIdx >= 0 ? pIdx : 0]!;
       const abbr = UNIT_ABBR[unit.metaId] ?? unit.metaId.slice(0, 2).toUpperCase();
-      drawUnit(ctx, sx, sy, p.HW, p.HH, p.DEPTH, color, abbr, !unit.alive);
+      // Team 0 faces front-right (toward enemy), team 1 faces front-left
+      const dir = pIdx === 0 ? "front-right" : "front-left";
+      drawUnit(ctx, sx, sy, p.HW, p.HH, p.DEPTH, color, abbr, !unit.alive, unit.metaId, dir);
     }
   }
 }
@@ -967,8 +1034,12 @@ function renderUnitCards(maxUnits: number): void {
     const card = document.createElement("div");
     card.className = `unit-card ${isSelected ? "selected" : ""} ${isUsed ? "used" : ""}`;
     card.dataset["metaId"] = unit.id;
+    const portrait = portraitPath(unit.id);
+    const portraitHtml = portrait !== null
+      ? `<div class="unit-portrait"><img src="${portrait}" alt="${name}" /></div>`
+      : `<div class="unit-abbr" style="background:${color};border-color:${color}">${abbr}</div>`;
     card.innerHTML = `
-      <div class="unit-abbr" style="background:${color};border-color:${color}">${abbr}</div>
+      ${portraitHtml}
       <div class="unit-info">
         <div class="unit-name">${name}</div>
         <div class="unit-stats">HP ${unit.baseHealth} · MOV ${unit.baseMovement} · ARM ${unit.baseArmor}</div>
@@ -1289,9 +1360,14 @@ function renderUnitInfoPanel(info: UnitInfoData | null): void {
   const unitName = UNIT_NAME_KO[info.metaId] ?? info.metaId;
   const unitColor = UNIT_COLOR[info.class] ?? "#888";
 
+  const panelPortrait = portraitPath(info.metaId);
+  const panelIconHtml = panelPortrait !== null
+    ? `<div class="unit-info-portrait"><img src="${panelPortrait}" alt="${unitName}" /></div>`
+    : `<div class="unit-info-icon" style="background:${unitColor}">${UNIT_ABBR[info.metaId] ?? info.metaId.slice(0, 2).toUpperCase()}</div>`;
+
   panel.innerHTML = `
     <div class="unit-info-header">
-      <div class="unit-info-icon" style="background:${unitColor}">${UNIT_ABBR[info.metaId] ?? info.metaId.slice(0, 2).toUpperCase()}</div>
+      ${panelIconHtml}
       <div class="unit-info-title">
         <div class="unit-info-name">${unitName}</div>
         <div class="unit-info-class">${info.class}</div>
@@ -1947,6 +2023,7 @@ async function tryRestoreSession(): Promise<void> {
   }
 }
 
+preloadSprites();
 void tryRestoreSession();
 
 // ─── 타일 메타데이터 초기 로드 ────────────────────────────────────────────────
