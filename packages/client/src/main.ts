@@ -1431,7 +1431,7 @@ function renderGame(state: GameStateSnapshot): void {
   const availH = boardWrap?.clientHeight;
 
   // Set up board interaction
-  setupBoardClick(canvas, state, isMyTurn, gridSize);
+  setupBoardClick(canvas, state, isMyTurn, gridSize, availW, availH);
 
   // Render on the active canvas
   const activeCanvas = (document.getElementById("board-canvas") as HTMLCanvasElement) ?? canvas;
@@ -1499,6 +1499,8 @@ function setupBoardClick(
   state: GameStateSnapshot,
   isMyTurn: boolean,
   gridSize: number,
+  availW?: number,
+  availH?: number,
 ): void {
   const newCanvas = canvas.cloneNode(true) as HTMLCanvasElement;
   canvas.parentNode?.replaceChild(newCanvas, canvas);
@@ -1530,7 +1532,7 @@ function setupBoardClick(
   // ── Hover: tooltip + cursor feedback ────────────────────────────────────────
   newCanvas.addEventListener("mousemove", (e) => {
     const rect = newCanvas.getBoundingClientRect();
-    const p = isoParams(gridSize);
+    const p = isoParams(gridSize, availW, availH);
     const mx = (e.clientX - rect.left) * (newCanvas.width / rect.width);
     const my = (e.clientY - rect.top) * (newCanvas.height / rect.height);
     const { row, col } = screenToGrid(mx, my, p.cx, p.cy, p.HW, p.HH);
@@ -1572,7 +1574,7 @@ function setupBoardClick(
 
   newCanvas.addEventListener("click", (e) => {
     const rect = newCanvas.getBoundingClientRect();
-    const p = isoParams(gridSize);
+    const p = isoParams(gridSize, availW, availH);
     const mx = (e.clientX - rect.left) * (newCanvas.width / rect.width);
     const my = (e.clientY - rect.top) * (newCanvas.height / rect.height);
     const { row, col } = screenToGrid(mx, my, p.cx, p.cy, p.HW, p.HH);

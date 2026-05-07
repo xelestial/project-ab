@@ -6,22 +6,7 @@
   "gridSize": 16,
   "maxUnitsPerPlayer": 3,
   "teamSize": 2,
-  "tileOverrides": [
-    { "position": { "row": 7, "col": 6 }, "tileType": "mountain" },
-    { "position": { "row": 7, "col": 7 }, "tileType": "mountain" },
-    { "position": { "row": 7, "col": 8 }, "tileType": "mountain" },
-    { "position": { "row": 8, "col": 7 }, "tileType": "mountain" },
-    { "position": { "row": 4, "col": 7 }, "tileType": "river" },
-    { "position": { "row": 5, "col": 7 }, "tileType": "river" },
-    { "position": { "row": 6, "col": 7 }, "tileType": "river" },
-    { "position": { "row": 9, "col": 7 }, "tileType": "river" },
-    { "position": { "row": 10, "col": 7 }, "tileType": "river" },
-    { "position": { "row": 11, "col": 7 }, "tileType": "river" },
-    { "position": { "row": 3, "col": 3 }, "tileType": "sand" },
-    { "position": { "row": 3, "col": 4 }, "tileType": "sand" },
-    { "position": { "row": 12, "col": 11 }, "tileType": "sand" },
-    { "position": { "row": 12, "col": 12 }, "tileType": "sand" }
-  ],
+  "tileOverrides": [],
   "spawnPoints": [
     {
       "playerId": 0,
