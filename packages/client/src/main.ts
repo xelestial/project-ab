@@ -10,6 +10,15 @@ import type { GameStateSnapshot } from "./ws-client.js";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
+interface BadgeSpec {
+  cx: number;
+  naturalTop: number;  // y before overlap adjustment
+  label: string;
+  color: string;
+  dead: boolean;
+  fontSize: number;
+}
+
 interface Seat {
   index: number;
   label: string;
@@ -527,6 +536,93 @@ function portraitPath(metaId: string): string | null {
   return `/sprites/portraits/${metaId}.png`;
 }
 
+function drawSingleBadge(
+  ctx: CanvasRenderingContext2D,
+  cx: number, topY: number,
+  label: string, color: string, dead: boolean, fontSize: number,
+): void {
+  const padX = fontSize * 0.5;
+  const padY = fontSize * 0.3;
+  ctx.font = `bold ${fontSize}px "Segoe UI", sans-serif`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "bottom";
+  const tw = ctx.measureText(label).width;
+  const bw = tw + padX * 2;
+  const bh = fontSize + padY * 2;
+  const bx = cx - bw / 2;
+  const by = topY;
+  const rad = bh / 2;
+  ctx.beginPath();
+  ctx.moveTo(bx + rad, by);
+  ctx.lineTo(bx + bw - rad, by);
+  ctx.arcTo(bx + bw, by, bx + bw, by + bh, rad);
+  ctx.lineTo(bx + bw, by + bh - rad);
+  ctx.arcTo(bx + bw, by + bh, bx + bw - rad, by + bh, rad);
+  ctx.lineTo(bx + rad, by + bh);
+  ctx.arcTo(bx, by + bh, bx, by + bh - rad, rad);
+  ctx.lineTo(bx, by + rad);
+  ctx.arcTo(bx, by, bx + rad, by, rad);
+  ctx.closePath();
+  ctx.fillStyle = color;
+  ctx.globalAlpha = dead ? 0.25 : 0.88;
+  ctx.fill();
+  ctx.globalAlpha = dead ? 0.25 : 1;
+  ctx.fillStyle = "#fff";
+  ctx.fillText(label, cx, by + bh - padY * 0.5);
+  ctx.globalAlpha = 1;
+}
+
+function drawBadges(ctx: CanvasRenderingContext2D, badges: BadgeSpec[]): void {
+  if (badges.length === 0) return;
+
+  // Compute pixel dims for each badge
+  const pad = (b: BadgeSpec) => ({ padX: b.fontSize * 0.5, padY: b.fontSize * 0.3 });
+  const bwOf = (b: BadgeSpec) => {
+    ctx.font = `bold ${b.fontSize}px "Segoe UI", sans-serif`;
+    return ctx.measureText(b.label).width + b.fontSize;
+  };
+  const bhOf = (b: BadgeSpec) => b.fontSize + b.fontSize * 0.6;
+
+  // Build rects with adjusted top y — resolve overlaps by pushing up
+  type Rect = { b: BadgeSpec; x0: number; y0: number; x1: number; y1: number };
+  const placed: Rect[] = [];
+  const gap = 2;
+
+  // Sort by naturalTop ascending (badges higher on screen are anchored first)
+  const sorted = [...badges].sort((a, b) => a.naturalTop - b.naturalTop);
+
+  for (const b of sorted) {
+    const bw = bwOf(b);
+    const bh = bhOf(b);
+    const x0 = b.cx - bw / 2;
+    const x1 = b.cx + bw / 2;
+    let y0 = b.naturalTop;
+
+    // Push up until no overlap with already placed badges
+    let tries = 0;
+    let moved = true;
+    while (moved && tries < 50) {
+      moved = false;
+      for (const p of placed) {
+        const xOverlap = x0 < p.x1 + gap && x1 > p.x0 - gap;
+        const yOverlap = y0 < p.y1 + gap && y0 + bh > p.y0 - gap;
+        if (xOverlap && yOverlap) {
+          y0 = p.y0 - bh - gap;
+          moved = true;
+        }
+      }
+      tries++;
+    }
+
+    placed.push({ b, x0, y0, x1, y1: y0 + bh });
+  }
+
+  // Draw all badges at resolved positions
+  for (const { b, y0 } of placed) {
+    drawSingleBadge(ctx, b.cx, y0, b.label, b.color, b.dead, b.fontSize);
+  }
+}
+
 function drawUnit(
   ctx: CanvasRenderingContext2D,
   sx: number, sy: number,
@@ -535,6 +631,7 @@ function drawUnit(
   metaId?: string,
   direction: "front-left" | "front-right" | "back-left" | "back-right" = "front-left",
   unitName: string = "",
+  badgeCollector?: BadgeSpec[],
 ): void {
   const cx = sx;
   const cy = sy + HH + DEPTH / 2;
@@ -563,38 +660,14 @@ function drawUnit(
 
     ctx.drawImage(spriteImg, drawX, drawY, spriteW, spriteH);
 
-    // Team colour badge: pill above sprite head with class initial + unit name
-    const badgeY = drawY - 4;
+    // Collect badge for second-pass overlap-resolved rendering
     const fontSize = Math.max(9, Math.round(HW * 0.45));
-    ctx.font = `bold ${fontSize}px "Segoe UI", sans-serif`;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "bottom";
-    const label = `${abbr} ${unitName}`;
-    const tw = ctx.measureText(label).width;
-    const padX = fontSize * 0.5;
-    const padY = fontSize * 0.3;
-    const bw = tw + padX * 2;
-    const bh = fontSize + padY * 2;
-    const bx = cx - bw / 2;
-    const by = badgeY - bh;
-    const rad = bh / 2;
-    ctx.beginPath();
-    ctx.moveTo(bx + rad, by);
-    ctx.lineTo(bx + bw - rad, by);
-    ctx.arcTo(bx + bw, by, bx + bw, by + bh, rad);
-    ctx.lineTo(bx + bw, by + bh - rad);
-    ctx.arcTo(bx + bw, by + bh, bx + bw - rad, by + bh, rad);
-    ctx.lineTo(bx + rad, by + bh);
-    ctx.arcTo(bx, by + bh, bx, by + bh - rad, rad);
-    ctx.lineTo(bx, by + rad);
-    ctx.arcTo(bx, by, bx + rad, by, rad);
-    ctx.closePath();
-    ctx.fillStyle = color;
-    ctx.globalAlpha = dead ? 0.25 : 0.88;
-    ctx.fill();
-    ctx.globalAlpha = dead ? 0.25 : 1;
-    ctx.fillStyle = "#fff";
-    ctx.fillText(label, cx, by + bh - padY * 0.5);
+    const naturalTop = drawY - 4 - (fontSize + fontSize * 0.3 * 2); // approx badge top
+    if (badgeCollector) {
+      badgeCollector.push({ cx, naturalTop, label: `${abbr} ${unitName}`, color, dead, fontSize });
+    } else {
+      drawSingleBadge(ctx, cx, naturalTop, `${abbr} ${unitName}`, color, dead, fontSize);
+    }
   } else {
     // Fallback: colored circle + abbreviation
     ctx.beginPath();
@@ -693,6 +766,9 @@ function renderIso(canvas: HTMLCanvasElement, opts: RenderOpts): void {
     placedByPos.set(`${pu.position.row},${pu.position.col}`, pu.metaId);
   }
 
+  // Badge collector for second-pass overlap-resolved rendering
+  const badgeList: BadgeSpec[] = [];
+
   // Draw order: back-to-front (row+col ascending)
   const cells: { row: number; col: number }[] = [];
   for (let r = 0; r < gridSize; r++) {
@@ -789,23 +865,25 @@ function renderIso(canvas: HTMLCanvasElement, opts: RenderOpts): void {
       ctx.stroke();
     }
 
-    // Draw placed unit (placement phase)
+    // Draw placed unit (placement phase) — no badge collector needed (solo units)
     const placedMetaId = placedByPos.get(key);
     if (placedMetaId !== undefined) {
       drawUnit(ctx, sx, sy, p.HW, p.HH, p.DEPTH, "#888", UNIT_ABBR[placedMetaId] ?? "??", false, placedMetaId, "front-left", UNIT_NAME_KO[placedMetaId] ?? placedMetaId);
     }
 
-    // Draw actual game unit
+    // Draw actual game unit (collect badge for second pass)
     const unit = unitsByPos.get(key);
     if (unit !== undefined) {
       const pIdx = playerIds.indexOf(unit.playerId);
       const color = PLAYER_COLORS[pIdx >= 0 ? pIdx : 0]!;
       const abbr = UNIT_ABBR[unit.metaId] ?? unit.metaId.slice(0, 2).toUpperCase();
-      // Team 0 faces front-right (toward enemy), team 1 faces front-left
       const dir = pIdx === 0 ? "front-right" : "front-left";
-      drawUnit(ctx, sx, sy, p.HW, p.HH, p.DEPTH, color, abbr, !unit.alive, unit.metaId, dir, UNIT_NAME_KO[unit.metaId] ?? unit.metaId);
+      drawUnit(ctx, sx, sy, p.HW, p.HH, p.DEPTH, color, abbr, !unit.alive, unit.metaId, dir, UNIT_NAME_KO[unit.metaId] ?? unit.metaId, badgeList);
     }
   }
+
+  // Second pass: draw all unit badges with overlap resolution
+  drawBadges(ctx, badgeList);
 }
 
 // ─── Screen helpers ────────────────────────────────────────────────────────────
