@@ -722,6 +722,215 @@
       50%       { transform: rotate(12deg); }
     }
 
+    /* ── Online lobby (rooms browser) ── */
+    #screen-rooms.active {
+      height: 100%;
+      overflow-y: auto;
+      padding: 1.5rem 2rem;
+      max-width: 1400px;
+      margin: 0 auto;
+      box-sizing: border-box;
+    }
+
+    .rooms-header {
+      display: flex;
+      align-items: center;
+      gap: 0.8rem;
+      margin-bottom: 1rem;
+      flex-wrap: wrap;
+    }
+    .rooms-header h2 { flex: 1; font-size: 1.3rem; min-width: 120px; }
+
+    .refresh-btn {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--text2);
+      border-radius: 8px;
+      padding: 0.4rem 0.8rem;
+      cursor: pointer;
+      font-size: 0.85rem;
+      transition: all 0.15s;
+    }
+    .refresh-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .refresh-btn.spinning { animation: spin 0.7s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .rooms-meta {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+      padding: 0.65rem 1rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 0.85rem;
+      color: var(--text2);
+      flex-wrap: wrap;
+    }
+    .rooms-meta .player-id-val {
+      color: var(--accent);
+      font-family: monospace;
+      font-weight: 600;
+    }
+    .rooms-count-badge {
+      margin-left: auto;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 0.15rem 0.65rem;
+      font-size: 0.75rem;
+      color: var(--text2);
+    }
+
+    /* ── Room cards grid ── */
+    .rooms-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
+
+    .room-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.1rem 1.2rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.65rem;
+      transition: border-color 0.15s, transform 0.1s, box-shadow 0.15s;
+    }
+    .room-card:hover { border-color: var(--accent); transform: translateY(-2px); box-shadow: 0 4px 16px rgba(88,166,255,0.1); }
+
+    .room-card-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 0.5rem;
+    }
+    .room-card-title { font-size: 1rem; font-weight: 700; line-height: 1.3; }
+
+    .room-status-row {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      flex-shrink: 0;
+    }
+    .room-status-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+    }
+    .room-status-dot.waiting {
+      background: var(--success);
+      box-shadow: 0 0 5px var(--success);
+    }
+    .room-status-dot.running { background: var(--warn); }
+    .room-status-dot.ended   { background: var(--text2); }
+    .room-status-text { font-size: 0.75rem; color: var(--text2); white-space: nowrap; }
+
+    .room-card-id {
+      font-size: 0.7rem;
+      color: var(--text2);
+      font-family: monospace;
+      background: var(--surface2);
+      border-radius: 4px;
+      padding: 0.15rem 0.45rem;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .room-slots {
+      display: flex;
+      gap: 1.2rem;
+      font-size: 0.82rem;
+      color: var(--text2);
+    }
+    .room-slots strong { color: var(--text); }
+
+    .room-progress-wrap { display: flex; flex-direction: column; gap: 3px; }
+    .room-progress-label { font-size: 0.7rem; color: var(--text2); display: flex; justify-content: space-between; }
+    .room-progress-bar {
+      background: var(--surface2);
+      border-radius: 4px;
+      height: 4px;
+      overflow: hidden;
+    }
+    .room-progress-fill {
+      height: 100%;
+      border-radius: 4px;
+      background: var(--accent);
+      transition: width 0.4s;
+    }
+
+    .room-created { font-size: 0.7rem; color: var(--text2); }
+
+    .join-btn {
+      margin-top: 0.2rem;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 0.55rem 1rem;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.15s;
+      width: 100%;
+    }
+    .join-btn:not(:disabled):hover { opacity: 0.85; }
+    .join-btn:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
+      background: var(--border);
+      color: var(--text2);
+    }
+
+    .rooms-empty {
+      grid-column: 1 / -1;
+      text-align: center;
+      padding: 3rem 2rem;
+      color: var(--text2);
+      font-size: 0.95rem;
+      background: var(--surface);
+      border: 1px dashed var(--border);
+      border-radius: 12px;
+    }
+    .rooms-empty p { margin-top: 0.6rem; font-size: 0.85rem; }
+
+    /* ── Online lobby button in main menu ── */
+    .online-lobby-banner {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      background: linear-gradient(135deg, rgba(88,166,255,0.08) 0%, rgba(88,166,255,0.02) 100%);
+      border: 1px solid rgba(88,166,255,0.35);
+      border-radius: 12px;
+      padding: 1rem 1.4rem;
+      margin-bottom: 1rem;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s, transform 0.1s;
+    }
+    .online-lobby-banner:hover {
+      border-color: var(--accent);
+      background: rgba(88,166,255,0.12);
+      transform: translateY(-1px);
+    }
+    .online-lobby-icon { font-size: 1.6rem; flex-shrink: 0; }
+    .online-lobby-text { flex: 1; }
+    .online-lobby-text h3 { font-size: 1rem; font-weight: 700; color: var(--accent); margin-bottom: 2px; }
+    .online-lobby-text p  { font-size: 0.8rem; color: var(--text2); }
+    .online-lobby-arrow { font-size: 1.2rem; color: var(--accent); flex-shrink: 0; }
+
+    .menu-section-label {
+      font-size: 0.8rem;
+      color: var(--text2);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin: 1.2rem 0 0.6rem;
+    }
+
     /* ── Util ── */
     .hidden { display: none !important; }
     .tag {
@@ -759,8 +968,30 @@
   <main>
     <!-- Main Menu -->
     <div id="screen-menu" class="screen active">
-      <h2 style="color:var(--text2);font-size:0.9rem;text-transform:uppercase;letter-spacing:0.1em;">게임 모드 선택</h2>
+      <div id="menu-lobby-banner"></div>
+      <div class="menu-section-label">새 게임 만들기</div>
       <div class="menu-grid" id="menu-grid"></div>
+    </div>
+
+    <!-- Online Rooms Browser -->
+    <div id="screen-rooms" class="screen">
+      <div class="rooms-header">
+        <button class="back-btn" id="rooms-back">← 뒤로</button>
+        <h2>온라인 로비</h2>
+        <button class="refresh-btn" id="rooms-refresh" title="새로고침">↻</button>
+        <button class="start-btn" id="rooms-create-btn">+ 새 게임</button>
+      </div>
+      <div class="rooms-meta">
+        <span>내 ID: <span class="player-id-val" id="rooms-player-id">—</span></span>
+        <span class="rooms-count-badge" id="rooms-count">0개 방</span>
+      </div>
+      <div class="rooms-grid" id="rooms-grid">
+        <div class="rooms-empty">
+          <div style="font-size:2rem">🎮</div>
+          <p>열린 방을 불러오는 중...</p>
+        </div>
+      </div>
+      <div class="status-msg" id="rooms-status"></div>
     </div>
 
     <!-- Lobby -->

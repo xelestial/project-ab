@@ -4,7 +4,7 @@
  */
 import gameModes from "./game-modes.json";
 import { ApiClient } from "./api.js";
-import type { TileMetaClient } from "./api.js";
+import type { TileMetaClient, RoomRecord } from "./api.js";
 import { WsClient } from "./ws-client.js";
 import type { GameStateSnapshot } from "./ws-client.js";
 
@@ -88,6 +88,9 @@ let lastGameState: GameStateSnapshot | null = null;
 
 // Tile metadata cache — loaded once from server, keyed by tileType
 let tileMetas: Map<string, TileMetaClient> = new Map();
+
+// Rooms browser auto-refresh
+let roomsRefreshInterval: ReturnType<typeof setInterval> | null = null;
 
 // ─── Unit metadata ─────────────────────────────────────────────────────────────
 
@@ -916,6 +919,24 @@ function addLog(msg: string): void {
 // ─── Main menu ─────────────────────────────────────────────────────────────────
 
 function renderMenu(): void {
+  // Online lobby banner
+  const banner = document.getElementById("menu-lobby-banner");
+  if (banner) {
+    banner.innerHTML = `
+      <div class="online-lobby-banner" id="online-lobby-btn">
+        <span class="online-lobby-icon">🌐</span>
+        <div class="online-lobby-text">
+          <h3>온라인 로비</h3>
+          <p>열린 방에 입장하거나 다른 플레이어와 함께 플레이하세요</p>
+        </div>
+        <span class="online-lobby-arrow">→</span>
+      </div>
+    `;
+    document.getElementById("online-lobby-btn")?.addEventListener("click", () => {
+      void openRoomsScreen();
+    });
+  }
+
   const grid = document.getElementById("menu-grid");
   if (!grid) return;
   grid.innerHTML = "";
@@ -933,6 +954,149 @@ function renderMenu(): void {
     card.addEventListener("click", () => openLobby(mode));
     grid.appendChild(card);
   });
+}
+
+// ─── Online rooms browser ──────────────────────────────────────────────────────
+
+function stopRoomsRefresh(): void {
+  if (roomsRefreshInterval !== null) {
+    clearInterval(roomsRefreshInterval);
+    roomsRefreshInterval = null;
+  }
+}
+
+async function openRoomsScreen(): Promise<void> {
+  try {
+    await api.login(humanPlayerId);
+  } catch {
+    // If login fails, just show the screen — listRooms will surface the error
+  }
+  document.getElementById("rooms-player-id")!.textContent = humanPlayerId;
+  document.getElementById("rooms-status")!.textContent = "";
+  showScreen("screen-rooms");
+  void refreshRooms();
+  stopRoomsRefresh();
+  roomsRefreshInterval = setInterval(() => void refreshRooms(), 4000);
+}
+
+async function refreshRooms(): Promise<void> {
+  const refreshBtn = document.getElementById("rooms-refresh");
+  refreshBtn?.classList.add("spinning");
+  try {
+    const rooms = await api.listRooms();
+    const countEl = document.getElementById("rooms-count");
+    if (countEl) countEl.textContent = `${rooms.length}개 방`;
+    renderRooms(rooms);
+  } catch (err) {
+    const statusEl = document.getElementById("rooms-status");
+    if (statusEl) {
+      statusEl.textContent = `방 목록 오류: ${String(err)}`;
+      statusEl.className = "status-msg err";
+    }
+  } finally {
+    refreshBtn?.classList.remove("spinning");
+  }
+}
+
+const MAP_NAME: Record<string, string> = {
+  map_test_01:  "일반전 (1v1 · 3유닛)",
+  map_1v1_6v6:  "격전 (1v1 · 6유닛)",
+  map_2v2_6v6:  "팀전 (2v2 · 6유닛)",
+};
+
+function renderRooms(rooms: RoomRecord[]): void {
+  const grid = document.getElementById("rooms-grid");
+  if (!grid) return;
+
+  if (rooms.length === 0) {
+    grid.innerHTML = `
+      <div class="rooms-empty">
+        <div style="font-size:2.5rem">🏕️</div>
+        <p>열린 방이 없습니다.</p>
+        <p>새 게임을 만들어 친구를 초대해보세요!</p>
+      </div>
+    `;
+    return;
+  }
+
+  grid.innerHTML = "";
+  for (const room of rooms) {
+    const canJoin = room.status === "waiting" && room.joinedPlayerCount < room.expectedPlayerCount;
+    const statusLabel = { waiting: "대기중", running: "진행중", ended: "종료" }[room.status] ?? room.status;
+    const modeName = (room.mapId && MAP_NAME[room.mapId]) || room.mapId || `게임 (${room.expectedPlayerCount}P)`;
+    const joinRatio = room.expectedPlayerCount > 0 ? room.joinedPlayerCount / room.expectedPlayerCount : 0;
+    const placeRatio = room.joinedPlayerCount > 0
+      ? room.placedPlayerCount / room.joinedPlayerCount
+      : 0;
+    void placeRatio; // currently not displayed
+    const timeStr = new Date(room.createdAt).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" });
+    const shortId = room.gameId.slice(0, 20) + (room.gameId.length > 20 ? "…" : "");
+
+    const card = document.createElement("div");
+    card.className = "room-card";
+    card.innerHTML = `
+      <div class="room-card-header">
+        <div class="room-card-title">${modeName}</div>
+        <div class="room-status-row">
+          <span class="room-status-dot ${room.status}"></span>
+          <span class="room-status-text">${statusLabel}</span>
+        </div>
+      </div>
+      <div class="room-card-id">${shortId}</div>
+      <div class="room-slots">
+        <span>👥 <strong>${room.joinedPlayerCount}</strong>&thinsp;/&thinsp;${room.expectedPlayerCount} 명</span>
+        <span>📋 배치 <strong>${room.placedPlayerCount}</strong>&thinsp;/&thinsp;${room.joinedPlayerCount}</span>
+      </div>
+      <div class="room-progress-wrap">
+        <div class="room-progress-label">
+          <span>입장</span>
+          <span>${Math.round(joinRatio * 100)}%</span>
+        </div>
+        <div class="room-progress-bar">
+          <div class="room-progress-fill" style="width:${joinRatio * 100}%"></div>
+        </div>
+      </div>
+      <div class="room-created">생성 ${timeStr}</div>
+      <button class="join-btn" ${canJoin ? "" : "disabled"}>
+        ${canJoin ? "입장하기" : room.status === "running" ? "⚔️ 진행중" : "자리 없음"}
+      </button>
+    `;
+
+    if (canJoin) {
+      card.querySelector<HTMLButtonElement>(".join-btn")!.addEventListener("click", () => {
+        void joinExistingRoom(room.gameId, room.mapId);
+      });
+    }
+
+    grid.appendChild(card);
+  }
+}
+
+async function joinExistingRoom(gameId: string, mapId: string): Promise<void> {
+  stopRoomsRefresh();
+
+  const statusEl = document.getElementById("rooms-status")!;
+  statusEl.textContent = "방 입장 중...";
+  statusEl.className = "status-msg";
+
+  try {
+    const mode = (gameModes.modes as GameMode[]).find((m) => m.mapId === mapId);
+    if (!mode) throw new Error(`알 수 없는 맵: ${mapId}`);
+
+    currentMode = mode;
+    currentGameId = gameId;
+    localStorage.setItem("ab_game_id", gameId);
+
+    const joinRes = await api.joinRoom(gameId, humanPlayerId);
+    humanTeamIndex = joinRes.teamIndex;
+    addLog(`방 입장: ${gameId} (팀 ${humanTeamIndex})`);
+
+    statusEl.textContent = "접속 중...";
+    await connectHumanPlayer(gameId);
+  } catch (err) {
+    statusEl.textContent = `오류: ${String(err)}`;
+    statusEl.className = "status-msg err";
+  }
 }
 
 // ─── Lobby ─────────────────────────────────────────────────────────────────────
@@ -2180,6 +2344,19 @@ function submitUnitOrder(orderedIds: string[]): void {
 }
 
 // ─── Bootstrap ────────────────────────────────────────────────────────────────
+
+// Rooms screen
+document.getElementById("rooms-back")?.addEventListener("click", () => {
+  stopRoomsRefresh();
+  showScreen("screen-menu");
+});
+document.getElementById("rooms-refresh")?.addEventListener("click", () => {
+  void refreshRooms();
+});
+document.getElementById("rooms-create-btn")?.addEventListener("click", () => {
+  stopRoomsRefresh();
+  showScreen("screen-menu");
+});
 
 document.getElementById("lobby-back")?.addEventListener("click", () => {
   stopPolling();

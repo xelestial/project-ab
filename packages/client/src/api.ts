@@ -34,6 +34,16 @@ export interface ApiAddAiResponse {
   started: boolean;
 }
 
+export interface RoomRecord {
+  gameId: string;
+  status: "waiting" | "running" | "ended";
+  mapId: string;
+  expectedPlayerCount: number;
+  joinedPlayerCount: number;
+  placedPlayerCount: number;
+  createdAt: number;
+}
+
 export class ApiClient {
   private token: string | null = null;
 
@@ -102,6 +112,24 @@ export class ApiClient {
     });
     if (!res.ok) throw new Error(`Add AI failed: ${res.status}`);
     return (await res.json()) as ApiAddAiResponse;
+  }
+
+  async listRooms(): Promise<RoomRecord[]> {
+    const res = await fetch(`${this.baseUrl}/api/v1/rooms`, {
+      headers: { Authorization: `Bearer ${this.token}` },
+    });
+    if (!res.ok) throw new Error(`List rooms failed: ${res.status}`);
+    const data = (await res.json()) as { rooms: Record<string, unknown>[] };
+    // Normalise: support both old server format (playerCount) and new (expectedPlayerCount)
+    return data.rooms.map((r) => ({
+      gameId: String(r["gameId"] ?? ""),
+      status: (r["status"] as RoomRecord["status"]) ?? "waiting",
+      mapId: String(r["mapId"] ?? ""),
+      expectedPlayerCount: Number(r["expectedPlayerCount"] ?? r["playerCount"] ?? 0),
+      joinedPlayerCount: Number(r["joinedPlayerCount"] ?? 0),
+      placedPlayerCount: Number(r["placedPlayerCount"] ?? 0),
+      createdAt: Number(r["createdAt"] ?? 0),
+    }));
   }
 
   async fetchTileMetas(): Promise<TileMetaClient[]> {
