@@ -12,11 +12,22 @@ import type { Redis } from "ioredis";
 
 // ─── 영속 세션 레코드 ──────────────────────────────────────────────────────────
 
+export interface PlacementEntry {
+  metaId: string;
+  position: { row: number; col: number };
+}
+
 export interface SessionRecord {
   gameId: string;
   state: GameState;
   status: "waiting" | "running" | "ended";
   playerIds: string[];
+  /** Map ID used to create this game (for room listing / recovery) */
+  mapId: string;
+  /** How many players are expected before the game can start */
+  expectedPlayerCount: number;
+  /** Pre-game unit placements: playerId → placed units (persisted so any instance can start the game) */
+  placements: Record<string, PlacementEntry[]>;
   createdAt: number;
   updatedAt: number;
 }
@@ -26,7 +37,8 @@ export interface SessionRecord {
 export interface ISessionStore {
   save(record: SessionRecord): Promise<void>;
   get(gameId: string): Promise<SessionRecord | undefined>;
-  update(gameId: string, state: GameState): Promise<void>;
+  update(gameId: string, state: GameState, playerIds?: string[]): Promise<void>;
+  savePlacement(gameId: string, playerId: string, entries: PlacementEntry[]): Promise<void>;
   end(gameId: string): Promise<void>;
   listActive(): Promise<SessionRecord[]>;
   delete(gameId: string): Promise<void>;
@@ -38,18 +50,27 @@ export class MemorySessionStore implements ISessionStore {
   private readonly store = new Map<string, SessionRecord>();
 
   async save(record: SessionRecord): Promise<void> {
-    this.store.set(record.gameId, { ...record });
+    this.store.set(record.gameId, { ...record, placements: { ...record.placements } });
   }
 
   async get(gameId: string): Promise<SessionRecord | undefined> {
     const rec = this.store.get(gameId);
-    return rec !== undefined ? { ...rec } : undefined;
+    return rec !== undefined ? { ...rec, placements: { ...rec.placements } } : undefined;
   }
 
-  async update(gameId: string, state: GameState): Promise<void> {
+  async update(gameId: string, state: GameState, playerIds?: string[]): Promise<void> {
     const rec = this.store.get(gameId);
     if (rec !== undefined) {
       rec.state = state;
+      rec.updatedAt = Date.now();
+      if (playerIds !== undefined) rec.playerIds = playerIds;
+    }
+  }
+
+  async savePlacement(gameId: string, playerId: string, entries: PlacementEntry[]): Promise<void> {
+    const rec = this.store.get(gameId);
+    if (rec !== undefined) {
+      rec.placements[playerId] = entries;
       rec.updatedAt = Date.now();
     }
   }
@@ -65,7 +86,7 @@ export class MemorySessionStore implements ISessionStore {
   async listActive(): Promise<SessionRecord[]> {
     return [...this.store.values()]
       .filter((r) => r.status !== "ended")
-      .map((r) => ({ ...r }));
+      .map((r) => ({ ...r, placements: { ...r.placements } }));
   }
 
   async delete(gameId: string): Promise<void> {
@@ -129,10 +150,26 @@ export class RedisSessionStore implements ISessionStore {
     }
   }
 
-  async update(gameId: string, state: GameState): Promise<void> {
+  async update(gameId: string, state: GameState, playerIds?: string[]): Promise<void> {
     const rec = await this.get(gameId);
     if (rec !== undefined) {
-      await this.save({ ...rec, state, updatedAt: Date.now() });
+      await this.save({
+        ...rec,
+        state,
+        updatedAt: Date.now(),
+        ...(playerIds !== undefined ? { playerIds } : {}),
+      });
+    }
+  }
+
+  async savePlacement(gameId: string, playerId: string, entries: PlacementEntry[]): Promise<void> {
+    const rec = await this.get(gameId);
+    if (rec !== undefined) {
+      await this.save({
+        ...rec,
+        placements: { ...rec.placements, [playerId]: entries },
+        updatedAt: Date.now(),
+      });
     }
   }
 

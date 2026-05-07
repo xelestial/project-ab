@@ -202,7 +202,7 @@ export async function registerRoutes(
       };
       const initialState = factory.createInitialState(gameOptions);
 
-      sessionManager.createSession(gameId, context, initialState, body.data.playerCount);
+      sessionManager.createSession(gameId, context, initialState, body.data.playerCount, body.data.mapId);
 
       return reply.code(201).send({
         gameId,
@@ -211,32 +211,41 @@ export async function registerRoutes(
     },
   );
 
+  /** GET /api/v1/rooms — room list comes from Redis so all instances see the same data */
   fastify.get(
     "/api/v1/rooms",
     { preHandler: requireAuth },
-    async () => ({
-      rooms: sessionManager.listActiveSessions().map((s) => ({
-        gameId: s.gameId,
-        status: s.status,
-        playerCount: s.adapters.size,
-        createdAt: s.createdAt,
-      })),
-    }),
+    async () => {
+      const records = await sessionManager.getStore().listActive();
+      return {
+        rooms: records.map((r) => ({
+          gameId: r.gameId,
+          status: r.status,
+          mapId: r.mapId,
+          expectedPlayerCount: r.expectedPlayerCount,
+          joinedPlayerCount: r.playerIds.length,
+          placedPlayerCount: Object.keys(r.placements).length,
+          createdAt: r.createdAt,
+        })),
+      };
+    },
   );
 
   fastify.get<{ Params: { gameId: string } }>(
     "/api/v1/rooms/:gameId",
     { preHandler: requireAuth },
     async (req, reply) => {
-      const session = sessionManager.getSession(req.params["gameId"]);
-      if (session === undefined) {
+      const gameId = req.params["gameId"];
+      // Try in-memory first; fall back to store for cross-instance visibility
+      const session = sessionManager.getSession(gameId);
+      if (session !== undefined) {
+        return { gameId: session.gameId, status: session.status, state: session.state };
+      }
+      const record = await sessionManager.getStore().get(gameId);
+      if (record === undefined) {
         return reply.code(404).send({ error: "Game not found" });
       }
-      return {
-        gameId: session.gameId,
-        status: session.status,
-        state: session.state,
-      };
+      return { gameId: record.gameId, status: record.status, state: record.state };
     },
   );
 
@@ -416,6 +425,7 @@ export async function registerRoutes(
       sessionManager.addAdapter(req.params["gameId"], adapter);
 
       // Auto-generate placement for AI
+      // Read occupied tiles from in-memory placements (already synced from store)
       const occupied = new Set<string>(
         [...session.placements.values()].flatMap((entries) =>
           entries.map((e) => `${e.position.row},${e.position.col}`),
@@ -424,7 +434,7 @@ export async function registerRoutes(
       const draftPool = (session.state.draft?.poolIds as string[] | undefined)
         ?? registry.getAllUnits().map((u) => u.id as string);
       const aiPlacement = generateAiPlacement(teamIndex, gridSize, maxUnits, draftPool, occupied);
-      session.placements.set(aiPlayerId as string, aiPlacement);
+      await sessionManager.savePlacement(req.params["gameId"], aiPlayerId as string, aiPlacement);
 
       // Try to start game if all placements + adapters are ready
       const updatedSession = sessionManager.getSession(req.params["gameId"])!;
@@ -536,8 +546,8 @@ export async function registerRoutes(
         metaSeen.add(u.metaId);
       }
 
-      // Store placement
-      session.placements.set(playerId, units);
+      // Persist placement to memory + store (Redis)
+      await sessionManager.savePlacement(session.gameId, playerId, units);
 
       // Register a PassThroughAdapter if this human doesn't have a WS adapter yet
       if (!session.adapters.has(playerId)) {
@@ -821,7 +831,7 @@ export async function registerRoutes(
         const { gameId, mapId, playerIds } = matchResult;
         const context = factory.createContext();
         const initialState = factory.createInitialState({ gameId, mapId, players: [] });
-        sessionManager.createSession(gameId, context, initialState, playerIds.length);
+        sessionManager.createSession(gameId, context, initialState, playerIds.length, mapId);
 
         return reply.code(201).send({
           status: "matched",

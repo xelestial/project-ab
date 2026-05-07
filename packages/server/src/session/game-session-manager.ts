@@ -1,25 +1,21 @@
 /**
  * GameSessionManager — manages active game sessions.
  *
- * Phase 1: in-memory (no external dependencies).
- * Phase 2: ISessionStore implementation swapped to RedisSessionStore.
+ * In-memory: GameContext (validators, resolvers), WebSocket adapters, spectators.
+ * Redis (via ISessionStore): GameState snapshots, placements, room metadata.
  *
- * Architecture: The manager holds non-serializable state (GameContext, adapters)
- * in memory. The ISessionStore handles persistent/distributed state (GameState snapshot).
- * This allows Redis to store state while keeping heavy objects (validators, resolvers)
- * local to the process.
+ * Session recovery: if a session is not in memory (server restart) but exists in
+ * the store (status "waiting"), it can be reconstructed via recoverFromStore().
  */
 import type { GameState } from "@ab/metadata";
-import type { IPlayerAdapter, GameContext } from "@ab/engine";
+import type { IPlayerAdapter, GameContext, GameFactory } from "@ab/engine";
 import { MemorySessionStore } from "./session-store.js";
-import type { ISessionStore, SessionRecord } from "./session-store.js";
+import type { ISessionStore, SessionRecord, PlacementEntry } from "./session-store.js";
 
 export type SpectatorSend = (msg: unknown) => void;
 
-export interface PlacementEntry {
-  metaId: string;
-  position: { row: number; col: number };
-}
+// Re-export PlacementEntry so routes/ws-server only import from this module
+export type { PlacementEntry };
 
 export interface GameSession {
   gameId: string;
@@ -30,9 +26,11 @@ export interface GameSession {
   state: GameState;
   status: "waiting" | "running" | "ended";
   createdAt: number;
+  /** Map ID (stored for recovery / listing) */
+  mapId: string;
   /** Total number of players expected (used for auto-start logic) */
   expectedPlayerCount: number;
-  /** Pre-game placement submissions: playerId → placed unit list */
+  /** Pre-game placement submissions: playerId → placed unit list (mirrored from store) */
   placements: Map<string, PlacementEntry[]>;
 }
 
@@ -48,7 +46,8 @@ export class GameSessionManager {
     gameId: string,
     context: GameContext,
     initialState: GameState,
-    expectedPlayerCount?: number,
+    expectedPlayerCount: number,
+    mapId: string,
   ): GameSession {
     const session: GameSession = {
       gameId,
@@ -58,22 +57,58 @@ export class GameSessionManager {
       state: initialState,
       status: "waiting",
       createdAt: Date.now(),
-      expectedPlayerCount: expectedPlayerCount ?? Object.keys(initialState.players).length,
+      mapId,
+      expectedPlayerCount,
       placements: new Map(),
     };
     this.sessions.set(gameId, session);
 
-    // Persist to store (async, fire-and-forget for now)
     const record: SessionRecord = {
       gameId,
       state: initialState,
       status: "waiting",
       playerIds: [],
+      mapId,
+      expectedPlayerCount,
+      placements: {},
       createdAt: session.createdAt,
       updatedAt: session.createdAt,
     };
     void this.store.save(record);
 
+    return session;
+  }
+
+  /**
+   * Rebuild a GameSession from a persisted SessionRecord (e.g. after server restart).
+   * Only viable for "waiting" sessions — running sessions cannot be resumed this way.
+   */
+  async recoverFromStore(gameId: string, factory: GameFactory): Promise<GameSession | undefined> {
+    const record = await this.store.get(gameId);
+    if (record === undefined || record.status === "ended") return undefined;
+
+    // If already in memory, just return it
+    const existing = this.sessions.get(gameId);
+    if (existing !== undefined) return existing;
+
+    const context = factory.createContext();
+    const placements = new Map<string, PlacementEntry[]>(
+      Object.entries(record.placements),
+    );
+
+    const session: GameSession = {
+      gameId,
+      context,
+      adapters: new Map(),
+      spectators: new Map(),
+      state: record.state,
+      status: record.status,
+      createdAt: record.createdAt,
+      mapId: record.mapId,
+      expectedPlayerCount: record.expectedPlayerCount,
+      placements,
+    };
+    this.sessions.set(gameId, session);
     return session;
   }
 
@@ -92,9 +127,18 @@ export class GameSessionManager {
     const session = this.sessions.get(gameId);
     if (session !== undefined) {
       session.state = state;
-      // Sync to persistent store
-      void this.store.update(gameId, state);
+      const playerIds = Object.keys(state.players);
+      void this.store.update(gameId, state, playerIds);
     }
+  }
+
+  /** Persist a placement both in-memory and in the store. */
+  async savePlacement(gameId: string, playerId: string, entries: PlacementEntry[]): Promise<void> {
+    const session = this.sessions.get(gameId);
+    if (session !== undefined) {
+      session.placements.set(playerId, entries);
+    }
+    await this.store.savePlacement(gameId, playerId, entries);
   }
 
   endSession(gameId: string): void {
@@ -129,11 +173,12 @@ export class GameSessionManager {
     }
   }
 
+  /** In-memory active sessions (does not query the store). */
   listActiveSessions(): GameSession[] {
     return [...this.sessions.values()].filter((s) => s.status !== "ended");
   }
 
-  /** Expose underlying store for server stats routes */
+  /** Expose underlying store — routes use this for Redis-backed room listing. */
   getStore(): ISessionStore {
     return this.store;
   }
