@@ -541,13 +541,12 @@ function drawUnit(
   const spriteImg = path !== null ? loadSprite(path) : null;
 
   if (spriteImg !== null && spriteImg.complete && spriteImg.naturalWidth > 0) {
-    // Original sprite: 404x1008, full body
-    // Draw the bottom 55% of the sprite (legs crop) anchored to tile top
-    // We show full sprite scaled to fit tile height × 2.2 (character stands ~2 tiles tall)
-    const spriteH = HH * 2.8;
+    // Sprite: 404×1008 full body. Scale to ~3.5× tile half-width so character
+    // stands visibly above the tile regardless of TW.
+    const spriteH = HW * 3.5;
     const spriteW = spriteH * (404 / 1008);
     const drawX = cx - spriteW / 2;
-    const drawY = sy - spriteH * 0.55; // anchor: feet align to tile bottom
+    const drawY = sy - spriteH * 0.62; // anchor: feet sit near tile front edge
 
     // Shadow ellipse
     ctx.beginPath();
