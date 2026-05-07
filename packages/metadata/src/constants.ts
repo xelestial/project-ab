@@ -58,8 +58,9 @@ export const ANIM_DEATH_MS = 600 as const;
 export const ANIM_TURN_TRANSITION_MS = 800 as const;
 
 // Terrain generation
-export const TERRAIN_ROCK_COUNT = 4 as const;          // rocks per 11×11 grid
-export const TERRAIN_WATER_COUNT = 4 as const;         // water tiles per 11×11 grid
+export const TERRAIN_PER_SIDE_MIN = 3 as const;        // rocks or water tiles per side (fixed)
+export const TERRAIN_PER_SIDE_MAX = 3 as const;        // rocks or water tiles per side (fixed)
+export const ELEMENTAL_PER_SIDE = 3 as const;          // elemental tiles per side
 export const RIVER_FORMATION_MIN_SIZE = 3 as const;    // min connected water tiles to become river
 
 // Error / validation
