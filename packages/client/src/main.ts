@@ -101,6 +101,13 @@ const UNIT_ABBR: Record<string, string> = {
   m1: "MG", k1: "KN", s1: "SP",
 };
 
+/** Base HP per unit type (matches metadata/data/units.json baseHealth) */
+const UNIT_BASE_HEALTH: Record<string, number> = {
+  t1: 6, t2: 6, f1: 4, f2: 4,
+  r1: 4, r2: 4, b1: 5, b2: 5,
+  m1: 3, k1: 5, s1: 4,
+};
+
 const UNIT_NAME_KO: Record<string, string> = {
   t1: "탱커1", t2: "탱커2", t3: "탱커3",
   f1: "파이터1", f2: "파이터2", f3: "파이터3", f4: "파이터4",
@@ -636,6 +643,7 @@ function drawUnit(
   direction: "front-left" | "front-right" | "back-left" | "back-right" = "front-left",
   unitName: string = "",
   badgeCollector?: BadgeSpec[],
+  currentHealth?: number,
 ): void {
   const cx = sx;
   const cy = sy + HH + DEPTH / 2;
@@ -694,6 +702,36 @@ function drawUnit(
     ctx.fillText(abbr, cx, feetY - HH - r);
   }
 
+  // ── HP bar above the unit (alive units only) ──────────────────────────────
+  if (!dead && currentHealth !== undefined && metaId !== undefined) {
+    const maxHp = UNIT_BASE_HEALTH[metaId] ?? 5;
+    const hpPct = Math.max(0, Math.min(1, currentHealth / maxHp));
+    const barW = Math.round(HW * 1.1);
+    const barH = Math.max(3, Math.round(HH * 0.18));
+    const barX = cx - barW / 2;
+    // Position bar just above the sprite head (sprite top = feetY - spriteH)
+    const spriteH = HW * 3.5;
+    const headY = feetY - spriteH;
+    const barY = headY - barH - 2;
+
+    // Background
+    ctx.globalAlpha = 0.75;
+    ctx.fillStyle = "#1a1a1a";
+    ctx.fillRect(barX, barY, barW, barH);
+
+    // HP fill
+    const hpColor = hpPct > 0.6 ? "#4caf50" : hpPct > 0.3 ? "#ff9800" : "#f44336";
+    ctx.fillStyle = hpColor;
+    ctx.fillRect(barX, barY, Math.round(barW * hpPct), barH);
+
+    // Border
+    ctx.globalAlpha = 0.9;
+    ctx.strokeStyle = "rgba(0,0,0,0.6)";
+    ctx.lineWidth = 0.5;
+    ctx.strokeRect(barX, barY, barW, barH);
+    ctx.globalAlpha = 1;
+  }
+
   ctx.globalAlpha = 1;
 }
 
@@ -729,6 +767,8 @@ interface RenderOpts {
     playerId: string;
     position: { row: number; col: number };
     alive: boolean;
+    teamIndex?: number;
+    currentHealth?: number;
   }>;
   playerIds?: string[];
   highlightHalf?: number; // teamIndex whose half to highlight (placement phase)
@@ -742,6 +782,62 @@ interface RenderOpts {
   availH?: number | undefined;   // board-wrap 가용 높이
   /** Tile metadata keyed by tileType — drives impassable border */
   tileMetas?: Map<string, TileMetaClient> | undefined;
+}
+
+// ── Direction helpers ─────────────────────────────────────────────────────────
+
+/** Isometric screen-X value for a grid cell (determines left/right in screen space) */
+function isoScreenX(pos: { row: number; col: number }): number {
+  return pos.col - pos.row;
+}
+
+/**
+ * Pick one of 4 isometric directions so a unit at `from` faces toward `to`.
+ * In this grid: front = larger row+col (toward viewer); right = larger col-row (screen-right).
+ */
+function directionToward(
+  from: { row: number; col: number },
+  to:   { row: number; col: number },
+): "front-left" | "front-right" | "back-left" | "back-right" {
+  const drow = to.row - from.row;
+  const dcol = to.col - from.col;
+  const isFront = (drow + dcol) >= 0;
+  const isRight = (dcol - drow) >= 0;
+  if ( isFront &&  isRight) return "front-right";
+  if ( isFront && !isRight) return "front-left";
+  if (!isFront &&  isRight) return "back-right";
+  return "back-left";
+}
+
+type UnitEntry = { position: { row: number; col: number }; teamIndex?: number; playerId: string; alive: boolean; currentHealth?: number };
+
+/**
+ * Find the nearest enemy to `unit` among `allUnits`.
+ * Tie-break by smallest |screenX(enemy) - screenX(unit)| (X 좌표가 가까운 순).
+ */
+function nearestEnemy(unit: UnitEntry, allUnits: UnitEntry[]): { row: number; col: number } | null {
+  const isEnemy = (u: UnitEntry) =>
+    u.alive && (u.teamIndex !== undefined ? u.teamIndex !== unit.teamIndex : u.playerId !== unit.playerId);
+  const enemies = allUnits.filter(isEnemy);
+  if (enemies.length === 0) return null;
+
+  const unitSX = isoScreenX(unit.position);
+  let best: UnitEntry | null = null;
+  let bestDist = Infinity;
+
+  for (const e of enemies) {
+    const d = Math.abs(e.position.row - unit.position.row) + Math.abs(e.position.col - unit.position.col);
+    if (d < bestDist) {
+      bestDist = d;
+      best = e;
+    } else if (d === bestDist && best !== null) {
+      // Tie: pick the enemy whose screen-X is closer to this unit's screen-X
+      if (Math.abs(isoScreenX(e.position) - unitSX) < Math.abs(isoScreenX(best.position) - unitSX)) {
+        best = e;
+      }
+    }
+  }
+  return best?.position ?? null;
 }
 
 function renderIso(canvas: HTMLCanvasElement, opts: RenderOpts): void {
@@ -881,8 +977,12 @@ function renderIso(canvas: HTMLCanvasElement, opts: RenderOpts): void {
       const pIdx = playerIds.indexOf(unit.playerId);
       const color = PLAYER_COLORS[pIdx >= 0 ? pIdx : 0]!;
       const abbr = UNIT_ABBR[unit.metaId] ?? unit.metaId.slice(0, 2).toUpperCase();
-      const dir = pIdx === 0 ? "front-right" : "front-left";
-      drawUnit(ctx, sx, sy, p.HW, p.HH, p.DEPTH, color, abbr, !unit.alive, unit.metaId, dir, UNIT_NAME_KO[unit.metaId] ?? unit.metaId, badgeList);
+      // Face the nearest enemy; fall back to team-based default if no enemies alive
+      const enemyPos = nearestEnemy(unit, units);
+      const dir = enemyPos
+        ? directionToward(unit.position, enemyPos)
+        : (pIdx === 0 ? "front-right" : "front-left");
+      drawUnit(ctx, sx, sy, p.HW, p.HH, p.DEPTH, color, abbr, !unit.alive, unit.metaId, dir, UNIT_NAME_KO[unit.metaId] ?? unit.metaId, badgeList, unit.currentHealth);
     }
   }
 
@@ -1610,6 +1710,8 @@ async function fetchAndShowUnitOptions(
       playerId: u.playerId as string,
       position: u.position,
       alive: u.alive,
+      teamIndex: (state.players[u.playerId as string]?.teamIndex ?? 0) as number,
+      currentHealth: u.currentHealth as number,
     }));
     renderIso(activeCanvas, {
       gridSize,
@@ -1892,6 +1994,8 @@ function renderGame(state: GameStateSnapshot): void {
     playerId: u.playerId as string,
     position: u.position,
     alive: u.alive,
+    teamIndex: (state.players[u.playerId as string]?.teamIndex ?? 0) as number,
+    currentHealth: u.currentHealth as number,
   }));
 
   const slot = state.turnOrder[state.currentTurnIndex];
@@ -2141,6 +2245,8 @@ function setupBoardClick(
         const unitsArr = Object.values(state.units).map((u) => ({
           metaId: u.metaId as string, playerId: u.playerId as string,
           position: u.position, alive: u.alive,
+          teamIndex: (state.players[u.playerId as string]?.teamIndex ?? 0) as number,
+          currentHealth: u.currentHealth as number,
         }));
         renderIso(newCanvas, {
           gridSize,
@@ -2163,6 +2269,8 @@ function setupBoardClick(
       const unitsArr = Object.values(state.units).map((u) => ({
         metaId: u.metaId as string, playerId: u.playerId as string,
         position: u.position, alive: u.alive,
+        teamIndex: (state.players[u.playerId as string]?.teamIndex ?? 0) as number,
+        currentHealth: u.currentHealth as number,
       }));
       renderIso(newCanvas, {
         gridSize,
