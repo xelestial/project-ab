@@ -4,11 +4,20 @@
  */
 import gameModes from "./game-modes.json";
 import { ApiClient } from "./api.js";
-import type { TileMetaClient } from "./api.js";
+import type { TileMetaClient, RoomRecord } from "./api.js";
 import { WsClient } from "./ws-client.js";
 import type { GameStateSnapshot } from "./ws-client.js";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
+
+interface BadgeSpec {
+  cx: number;
+  naturalTop: number;  // y before overlap adjustment
+  label: string;
+  color: string;
+  dead: boolean;
+  fontSize: number;
+}
 
 interface Seat {
   index: number;
@@ -62,12 +71,13 @@ const ws = new WsClient();
 let currentMode: GameMode | null = null;
 let seatTypes: ("human" | "ai")[] = [];
 
-// Persist player ID across page refreshes — generates once, then reuses from localStorage
-let humanPlayerId: string = localStorage.getItem("ab_player_id") ??
+// Player ID: per-tab (sessionStorage) so multiple browser tabs can be separate players.
+// Game session ID: also per-tab so each tab tracks its own active game.
+let humanPlayerId: string = sessionStorage.getItem("ab_player_id") ??
   `player_${Math.random().toString(36).slice(2, 8)}`;
-localStorage.setItem("ab_player_id", humanPlayerId);
+sessionStorage.setItem("ab_player_id", humanPlayerId);
 
-let currentGameId: string | null = localStorage.getItem("ab_game_id");
+let currentGameId: string | null = sessionStorage.getItem("ab_game_id");
 let humanTeamIndex = 0;
 let logEntries: string[] = [];
 let availableUnits: UnitMeta[] = [];
@@ -80,17 +90,22 @@ let lastGameState: GameStateSnapshot | null = null;
 // Tile metadata cache — loaded once from server, keyed by tileType
 let tileMetas: Map<string, TileMetaClient> = new Map();
 
+// Rooms browser auto-refresh
+let roomsRefreshInterval: ReturnType<typeof setInterval> | null = null;
+
 // ─── Unit metadata ─────────────────────────────────────────────────────────────
 
 const UNIT_ABBR: Record<string, string> = {
-  t1: "TK", t2: "TK", f1: "FT", f2: "FT",
-  r1: "RG", r2: "RG", b1: "BR", b2: "BR",
+  t1: "TK", t2: "TK", t3: "TK", f1: "FT", f2: "FT", f3: "FT", f4: "FT",
+  r1: "RG", r2: "RG", r3: "RG", r4: "RG", b1: "BR", b2: "BR", b3: "BR", b4: "BR",
   m1: "MG", k1: "KN", s1: "SP",
 };
 
 const UNIT_NAME_KO: Record<string, string> = {
-  t1: "탱커", t2: "탱커", f1: "파이터", f2: "파이터",
-  r1: "레인저", r2: "레인저", b1: "브루트", b2: "브루트",
+  t1: "탱커1", t2: "탱커2", t3: "탱커3",
+  f1: "파이터1", f2: "파이터2", f3: "파이터3", f4: "파이터4",
+  r1: "레인저1", r2: "레인저2", r3: "레인저3", r4: "레인저4",
+  b1: "브루트1", b2: "브루트2", b3: "브루트3", b4: "브루트4",
   m1: "메이지", k1: "나이트", s1: "서포트",
 };
 
@@ -161,9 +176,12 @@ function isoParams(
   const HH = TH / 2;
   const DEPTH = Math.round(TH * 0.4);
   const canvasW = gridSize * TW + TW;
-  const canvasH = gridSize * TH + TH + DEPTH + TH;
+  // Extra top padding so sprites at row-0 don't overflow above the canvas.
+  // Sprite height = HW * 3.5; tiles at row-0 start at cy, so reserve that much.
+  const spriteTopPad = Math.round(HW * 3.5);
+  const canvasH = gridSize * TH + TH + DEPTH + TH + spriteTopPad;
   const cx = canvasW / 2;
-  const cy = HH + 4;
+  const cy = HH + 4 + spriteTopPad;
   return { TW, TH, HW, HH, DEPTH, cx, cy, canvasW, canvasH };
 }
 
@@ -522,6 +540,93 @@ function portraitPath(metaId: string): string | null {
   return `/sprites/portraits/${metaId}.png`;
 }
 
+function drawSingleBadge(
+  ctx: CanvasRenderingContext2D,
+  cx: number, topY: number,
+  label: string, color: string, dead: boolean, fontSize: number,
+): void {
+  const padX = fontSize * 0.5;
+  const padY = fontSize * 0.3;
+  ctx.font = `bold ${fontSize}px "Segoe UI", sans-serif`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "bottom";
+  const tw = ctx.measureText(label).width;
+  const bw = tw + padX * 2;
+  const bh = fontSize + padY * 2;
+  const bx = cx - bw / 2;
+  const by = topY;
+  const rad = bh / 2;
+  ctx.beginPath();
+  ctx.moveTo(bx + rad, by);
+  ctx.lineTo(bx + bw - rad, by);
+  ctx.arcTo(bx + bw, by, bx + bw, by + bh, rad);
+  ctx.lineTo(bx + bw, by + bh - rad);
+  ctx.arcTo(bx + bw, by + bh, bx + bw - rad, by + bh, rad);
+  ctx.lineTo(bx + rad, by + bh);
+  ctx.arcTo(bx, by + bh, bx, by + bh - rad, rad);
+  ctx.lineTo(bx, by + rad);
+  ctx.arcTo(bx, by, bx + rad, by, rad);
+  ctx.closePath();
+  ctx.fillStyle = color;
+  ctx.globalAlpha = dead ? 0.25 : 0.88;
+  ctx.fill();
+  ctx.globalAlpha = dead ? 0.25 : 1;
+  ctx.fillStyle = "#fff";
+  ctx.fillText(label, cx, by + bh - padY * 0.5);
+  ctx.globalAlpha = 1;
+}
+
+function drawBadges(ctx: CanvasRenderingContext2D, badges: BadgeSpec[]): void {
+  if (badges.length === 0) return;
+
+  // Compute pixel dims for each badge
+  const pad = (b: BadgeSpec) => ({ padX: b.fontSize * 0.5, padY: b.fontSize * 0.3 });
+  const bwOf = (b: BadgeSpec) => {
+    ctx.font = `bold ${b.fontSize}px "Segoe UI", sans-serif`;
+    return ctx.measureText(b.label).width + b.fontSize;
+  };
+  const bhOf = (b: BadgeSpec) => b.fontSize + b.fontSize * 0.6;
+
+  // Build rects with adjusted top y — resolve overlaps by pushing up
+  type Rect = { b: BadgeSpec; x0: number; y0: number; x1: number; y1: number };
+  const placed: Rect[] = [];
+  const gap = 2;
+
+  // Sort by naturalTop ascending (badges higher on screen are anchored first)
+  const sorted = [...badges].sort((a, b) => a.naturalTop - b.naturalTop);
+
+  for (const b of sorted) {
+    const bw = bwOf(b);
+    const bh = bhOf(b);
+    const x0 = b.cx - bw / 2;
+    const x1 = b.cx + bw / 2;
+    let y0 = b.naturalTop;
+
+    // Push up until no overlap with already placed badges
+    let tries = 0;
+    let moved = true;
+    while (moved && tries < 50) {
+      moved = false;
+      for (const p of placed) {
+        const xOverlap = x0 < p.x1 + gap && x1 > p.x0 - gap;
+        const yOverlap = y0 < p.y1 + gap && y0 + bh > p.y0 - gap;
+        if (xOverlap && yOverlap) {
+          y0 = p.y0 - bh - gap;
+          moved = true;
+        }
+      }
+      tries++;
+    }
+
+    placed.push({ b, x0, y0, x1, y1: y0 + bh });
+  }
+
+  // Draw all badges at resolved positions
+  for (const { b, y0 } of placed) {
+    drawSingleBadge(ctx, b.cx, y0, b.label, b.color, b.dead, b.fontSize);
+  }
+}
+
 function drawUnit(
   ctx: CanvasRenderingContext2D,
   sx: number, sy: number,
@@ -529,6 +634,8 @@ function drawUnit(
   color: string, abbr: string, dead: boolean,
   metaId?: string,
   direction: "front-left" | "front-right" | "back-left" | "back-right" = "front-left",
+  unitName: string = "",
+  badgeCollector?: BadgeSpec[],
 ): void {
   const cx = sx;
   const cy = sy + HH + DEPTH / 2;
@@ -540,31 +647,40 @@ function drawUnit(
   const path = metaId !== undefined ? spritePath(metaId, direction) : null;
   const spriteImg = path !== null ? loadSprite(path) : null;
 
+  // Feet anchored at front vertex of tile top face (sx, sy + HH*2)
+  const feetY = sy + HH * 2;
+
   if (spriteImg !== null && spriteImg.complete && spriteImg.naturalWidth > 0) {
-    // Original sprite: 404x1008, full body
-    // Draw the bottom 55% of the sprite (legs crop) anchored to tile top
-    // We show full sprite scaled to fit tile height × 2.2 (character stands ~2 tiles tall)
-    const spriteH = HH * 2.8;
+    const spriteH = HW * 3.5;
     const spriteW = spriteH * (404 / 1008);
     const drawX = cx - spriteW / 2;
-    const drawY = sy - spriteH * 0.55; // anchor: feet align to tile bottom
+    const drawY = feetY - spriteH; // feet at bottom of sprite
 
-    // Shadow ellipse
+    // Shadow ellipse at feet
     ctx.beginPath();
-    ctx.ellipse(cx, sy + HH * 0.9, r * 0.7, r * 0.22, 0, 0, Math.PI * 2);
+    ctx.ellipse(cx, feetY - HH * 0.3, r * 0.7, r * 0.22, 0, 0, Math.PI * 2);
     ctx.fillStyle = "rgba(0,0,0,0.35)";
     ctx.fill();
 
     ctx.drawImage(spriteImg, drawX, drawY, spriteW, spriteH);
+
+    // Collect badge for second-pass overlap-resolved rendering
+    const fontSize = Math.max(9, Math.round(HW * 0.45));
+    const naturalTop = drawY - 4 - (fontSize + fontSize * 0.3 * 2); // approx badge top
+    if (badgeCollector) {
+      badgeCollector.push({ cx, naturalTop, label: `${abbr} ${unitName}`, color, dead, fontSize });
+    } else {
+      drawSingleBadge(ctx, cx, naturalTop, `${abbr} ${unitName}`, color, dead, fontSize);
+    }
   } else {
     // Fallback: colored circle + abbreviation
     ctx.beginPath();
-    ctx.ellipse(cx, cy + r * 0.2, r * 0.7, r * 0.25, 0, 0, Math.PI * 2);
+    ctx.ellipse(cx, feetY - HH * 0.2, r * 0.7, r * 0.25, 0, 0, Math.PI * 2);
     ctx.fillStyle = "rgba(0,0,0,0.4)";
     ctx.fill();
 
     ctx.beginPath();
-    ctx.arc(cx, cy - r * 0.3, r, 0, Math.PI * 2);
+    ctx.arc(cx, feetY - HH - r, r, 0, Math.PI * 2);
     ctx.fillStyle = color;
     ctx.fill();
     ctx.strokeStyle = "rgba(255,255,255,0.5)";
@@ -575,7 +691,7 @@ function drawUnit(
     ctx.font = `bold ${Math.round(r * 0.75)}px "Segoe UI", sans-serif`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText(abbr, cx, cy - r * 0.3);
+    ctx.fillText(abbr, cx, feetY - HH - r);
   }
 
   ctx.globalAlpha = 1;
@@ -653,6 +769,9 @@ function renderIso(canvas: HTMLCanvasElement, opts: RenderOpts): void {
   for (const pu of placed) {
     placedByPos.set(`${pu.position.row},${pu.position.col}`, pu.metaId);
   }
+
+  // Badge collector for second-pass overlap-resolved rendering
+  const badgeList: BadgeSpec[] = [];
 
   // Draw order: back-to-front (row+col ascending)
   const cells: { row: number; col: number }[] = [];
@@ -750,23 +869,25 @@ function renderIso(canvas: HTMLCanvasElement, opts: RenderOpts): void {
       ctx.stroke();
     }
 
-    // Draw placed unit (placement phase)
+    // Draw placed unit (placement phase) — no badge collector needed (solo units)
     const placedMetaId = placedByPos.get(key);
     if (placedMetaId !== undefined) {
-      drawUnit(ctx, sx, sy, p.HW, p.HH, p.DEPTH, "#888", UNIT_ABBR[placedMetaId] ?? "??", false, placedMetaId, "front-left");
+      drawUnit(ctx, sx, sy, p.HW, p.HH, p.DEPTH, "#888", UNIT_ABBR[placedMetaId] ?? "??", false, placedMetaId, "front-left", UNIT_NAME_KO[placedMetaId] ?? placedMetaId);
     }
 
-    // Draw actual game unit
+    // Draw actual game unit (collect badge for second pass)
     const unit = unitsByPos.get(key);
     if (unit !== undefined) {
       const pIdx = playerIds.indexOf(unit.playerId);
       const color = PLAYER_COLORS[pIdx >= 0 ? pIdx : 0]!;
       const abbr = UNIT_ABBR[unit.metaId] ?? unit.metaId.slice(0, 2).toUpperCase();
-      // Team 0 faces front-right (toward enemy), team 1 faces front-left
       const dir = pIdx === 0 ? "front-right" : "front-left";
-      drawUnit(ctx, sx, sy, p.HW, p.HH, p.DEPTH, color, abbr, !unit.alive, unit.metaId, dir);
+      drawUnit(ctx, sx, sy, p.HW, p.HH, p.DEPTH, color, abbr, !unit.alive, unit.metaId, dir, UNIT_NAME_KO[unit.metaId] ?? unit.metaId, badgeList);
     }
   }
+
+  // Second pass: draw all unit badges with overlap resolution
+  drawBadges(ctx, badgeList);
 }
 
 // ─── Screen helpers ────────────────────────────────────────────────────────────
@@ -799,6 +920,24 @@ function addLog(msg: string): void {
 // ─── Main menu ─────────────────────────────────────────────────────────────────
 
 function renderMenu(): void {
+  // Online lobby banner
+  const banner = document.getElementById("menu-lobby-banner");
+  if (banner) {
+    banner.innerHTML = `
+      <div class="online-lobby-banner" id="online-lobby-btn">
+        <span class="online-lobby-icon">🌐</span>
+        <div class="online-lobby-text">
+          <h3>온라인 로비</h3>
+          <p>열린 방에 입장하거나 다른 플레이어와 함께 플레이하세요</p>
+        </div>
+        <span class="online-lobby-arrow">→</span>
+      </div>
+    `;
+    document.getElementById("online-lobby-btn")?.addEventListener("click", () => {
+      void openRoomsScreen();
+    });
+  }
+
   const grid = document.getElementById("menu-grid");
   if (!grid) return;
   grid.innerHTML = "";
@@ -816,6 +955,162 @@ function renderMenu(): void {
     card.addEventListener("click", () => openLobby(mode));
     grid.appendChild(card);
   });
+}
+
+// ─── Online rooms browser ──────────────────────────────────────────────────────
+
+function stopRoomsRefresh(): void {
+  if (roomsRefreshInterval !== null) {
+    clearInterval(roomsRefreshInterval);
+    roomsRefreshInterval = null;
+  }
+}
+
+async function openRoomsScreen(): Promise<void> {
+  try {
+    await api.login(humanPlayerId);
+  } catch {
+    // If login fails, just show the screen — listRooms will surface the error
+  }
+  document.getElementById("rooms-player-id")!.textContent = humanPlayerId;
+  document.getElementById("rooms-status")!.textContent = "";
+  showScreen("screen-rooms");
+  void refreshRooms();
+  stopRoomsRefresh();
+  roomsRefreshInterval = setInterval(() => void refreshRooms(), 4000);
+}
+
+async function refreshRooms(): Promise<void> {
+  const refreshBtn = document.getElementById("rooms-refresh");
+  refreshBtn?.classList.add("spinning");
+  try {
+    const rooms = await api.listRooms();
+    const countEl = document.getElementById("rooms-count");
+    if (countEl) countEl.textContent = `${rooms.length}개 방`;
+    renderRooms(rooms);
+  } catch (err) {
+    const statusEl = document.getElementById("rooms-status");
+    if (statusEl) {
+      statusEl.textContent = `방 목록 오류: ${String(err)}`;
+      statusEl.className = "status-msg err";
+    }
+  } finally {
+    refreshBtn?.classList.remove("spinning");
+  }
+}
+
+const MAP_NAME: Record<string, string> = {
+  map_test_01:  "일반전 (1v1 · 3유닛)",
+  map_1v1_6v6:  "격전 (1v1 · 6유닛)",
+  map_2v2_6v6:  "팀전 (2v2 · 6유닛)",
+};
+
+function renderRooms(rooms: RoomRecord[]): void {
+  const grid = document.getElementById("rooms-grid");
+  if (!grid) return;
+
+  if (rooms.length === 0) {
+    grid.innerHTML = `
+      <div class="rooms-empty">
+        <div style="font-size:2.5rem">🏕️</div>
+        <p>열린 방이 없습니다.</p>
+        <p>새 게임을 만들어 친구를 초대해보세요!</p>
+      </div>
+    `;
+    return;
+  }
+
+  grid.innerHTML = "";
+  for (const room of rooms) {
+    const canJoin = room.status === "waiting" && room.joinedPlayerCount < room.expectedPlayerCount;
+    const statusLabel = { waiting: "대기중", running: "진행중", ended: "종료" }[room.status] ?? room.status;
+    const modeName = (room.mapId && MAP_NAME[room.mapId]) || room.mapId || `게임 (${room.expectedPlayerCount}P)`;
+    const joinRatio = room.expectedPlayerCount > 0 ? room.joinedPlayerCount / room.expectedPlayerCount : 0;
+    const placeRatio = room.joinedPlayerCount > 0
+      ? room.placedPlayerCount / room.joinedPlayerCount
+      : 0;
+    void placeRatio; // currently not displayed
+    const timeStr = new Date(room.createdAt).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" });
+    const shortId = room.gameId.slice(0, 20) + (room.gameId.length > 20 ? "…" : "");
+
+    const card = document.createElement("div");
+    card.className = "room-card";
+    card.innerHTML = `
+      <div class="room-card-header">
+        <div class="room-card-title">${modeName}</div>
+        <div class="room-status-row">
+          <span class="room-status-dot ${room.status}"></span>
+          <span class="room-status-text">${statusLabel}</span>
+        </div>
+      </div>
+      <div class="room-card-id">${shortId}</div>
+      <div class="room-slots">
+        <span>👥 <strong>${room.joinedPlayerCount}</strong>&thinsp;/&thinsp;${room.expectedPlayerCount} 명</span>
+        <span>📋 배치 <strong>${room.placedPlayerCount}</strong>&thinsp;/&thinsp;${room.joinedPlayerCount}</span>
+      </div>
+      <div class="room-progress-wrap">
+        <div class="room-progress-label">
+          <span>입장</span>
+          <span>${Math.round(joinRatio * 100)}%</span>
+        </div>
+        <div class="room-progress-bar">
+          <div class="room-progress-fill" style="width:${joinRatio * 100}%"></div>
+        </div>
+      </div>
+      <div class="room-created">생성 ${timeStr}</div>
+      <button class="join-btn" ${canJoin ? "" : "disabled"}>
+        ${canJoin ? "입장하기" : room.status === "running" ? "⚔️ 진행중" : "자리 없음"}
+      </button>
+    `;
+
+    if (canJoin) {
+      card.querySelector<HTMLButtonElement>(".join-btn")!.addEventListener("click", () => {
+        void joinExistingRoom(room.gameId, room.mapId);
+      });
+    }
+
+    grid.appendChild(card);
+  }
+}
+
+async function joinExistingRoom(gameId: string, mapId: string): Promise<void> {
+  stopRoomsRefresh();
+
+  const statusEl = document.getElementById("rooms-status")!;
+  statusEl.textContent = "방 입장 중...";
+  statusEl.className = "status-msg";
+
+  try {
+    // Resolve mapId: if missing (old server format), fetch from room details
+    let resolvedMapId = mapId;
+    if (!resolvedMapId) {
+      const token = api.getToken();
+      const res = await fetch(`${API_BASE}/api/v1/rooms/${gameId}`, {
+        headers: { Authorization: `Bearer ${token ?? ""}` },
+      });
+      if (res.ok) {
+        const data = (await res.json()) as { state?: { map?: { mapId?: string } } };
+        resolvedMapId = data.state?.map?.mapId ?? "";
+      }
+    }
+
+    const mode = (gameModes.modes as GameMode[]).find((m) => m.mapId === resolvedMapId);
+    if (!mode) throw new Error(`알 수 없는 맵: ${resolvedMapId || gameId}`);
+
+    currentMode = mode;
+    currentGameId = gameId;
+    sessionStorage.setItem("ab_game_id", gameId);
+
+    const joinRes = await api.joinRoom(gameId, humanPlayerId);
+    humanTeamIndex = joinRes.teamIndex;
+    addLog(`방 입장: ${gameId} (팀 ${humanTeamIndex})`);
+
+    statusEl.textContent = "접속 중...";
+    await connectHumanPlayer(gameId);
+  } catch (err) {
+    statusEl.textContent = `오류: ${String(err)}`;
+    statusEl.className = "status-msg err";
+  }
 }
 
 // ─── Lobby ─────────────────────────────────────────────────────────────────────
@@ -882,7 +1177,7 @@ async function startGame(): Promise<void> {
       playerCount: currentMode.playerCount,
     });
     currentGameId = room.gameId;
-    localStorage.setItem("ab_game_id", room.gameId);
+    sessionStorage.setItem("ab_game_id", room.gameId);
     addLog(`게임 생성: ${room.gameId}`);
 
     const hasHuman = seatTypes.some((t) => t === "human");
@@ -1335,6 +1630,7 @@ function renderUnitInfoPanel(info: UnitInfoData | null): void {
   const panel = document.getElementById("unit-info-panel");
   if (!panel) return;
   if (info === null) {
+    panel.classList.remove("visible");
     panel.innerHTML = '<div class="unit-info-empty">유닛을 클릭하면 정보가 표시됩니다</div>';
     return;
   }
@@ -1393,6 +1689,7 @@ function renderUnitInfoPanel(info: UnitInfoData | null): void {
     <div class="unit-info-effects">${effectsHtml}</div>
     <div class="unit-info-actions">${actionsHtml}</div>
   `;
+  panel.classList.add("visible");
 }
 
 async function submitAction(action: {
@@ -1423,29 +1720,163 @@ function renderTurnOrder(state: GameStateSnapshot, playerIds: string[]): void {
   const turnOrder = state.turnOrder;
   const currentIdx = state.currentTurnIndex;
 
+  // Group slots by player team boundary to add dividers
+  let lastPIdx = -1;
+
   turnOrder.forEach((slot, idx) => {
     const unit = slot.unitId ? state.units[slot.unitId] : undefined;
     const pIdx = playerIds.indexOf(slot.playerId);
     const color = PLAYER_COLORS[pIdx >= 0 ? pIdx : 0]!;
-    const abbr = unit ? (UNIT_ABBR[unit.metaId as string] ?? (unit.metaId as string).slice(0, 2).toUpperCase()) : slot.playerId.slice(0, 2).toUpperCase();
+    const metaId = unit ? (unit.metaId as string) : "";
+    const abbr = metaId ? (UNIT_ABBR[metaId] ?? metaId.slice(0, 2).toUpperCase()) : slot.playerId.slice(0, 2).toUpperCase();
+    const unitName = metaId ? (UNIT_NAME_KO[metaId] ?? metaId) : slot.playerId.slice(0, 8);
     const isDead = unit ? !unit.alive : false;
     const isCurrent = idx === currentIdx;
     const isPast = idx < currentIdx;
 
-    const item = document.createElement("div");
-    item.className = `turn-slot ${isCurrent ? "turn-slot-active" : ""} ${isPast ? "turn-slot-past" : ""} ${isDead ? "turn-slot-dead" : ""}`;
-    item.style.borderColor = color;
-    item.style.backgroundColor = isCurrent ? color : "transparent";
-    item.innerHTML = `
-      <div class="turn-slot-abbr" style="color:${isCurrent ? "#fff" : color}">${abbr}</div>
-      ${isCurrent ? '<div class="turn-slot-arrow">&#9660;</div>' : ""}
+    // Team boundary divider
+    if (pIdx !== lastPIdx && idx > 0) {
+      const div = document.createElement("div");
+      div.className = "hud-divider";
+      bar.appendChild(div);
+    }
+    lastPIdx = pIdx;
+
+    // HP calculation
+    const meta = availableUnits.find(m => m.id === metaId);
+    const maxHp = meta?.baseHealth ?? 1;
+    const curHp = unit?.currentHealth ?? 0;
+    const hpPct = isDead ? 0 : Math.max(0, Math.min(100, (curHp / maxHp) * 100));
+    const hpColor = hpPct > 60 ? "#4caf50" : hpPct > 30 ? "#ff9800" : "#f44336";
+
+    // Portrait
+    const portrait = metaId ? portraitPath(metaId) : null;
+    const portraitHtml = portrait
+      ? `<img src="${portrait}" alt="${unitName}" />`
+      : `<div class="huc-portrait-fallback" style="color:${color}">${abbr}</div>`;
+
+    // Active effects
+    const effectsHtml = (unit?.actionsUsed)
+      ? [
+          unit.actionsUsed.moved ? `<span class="huc-effect">이동↑</span>` : "",
+          unit.actionsUsed.attacked ? `<span class="huc-effect">공격↑</span>` : "",
+        ].filter(Boolean).join("") || ""
+      : "";
+
+    const card = document.createElement("div");
+    card.className = [
+      "hud-unit-card",
+      isCurrent ? "huc-active" : "",
+      isPast ? "huc-past" : "",
+      isDead ? "huc-dead" : "",
+    ].filter(Boolean).join(" ");
+    card.style.setProperty("--team-color", color);
+    card.dataset["unitId"] = slot.unitId ?? "";
+    card.dataset["metaId"] = metaId;
+    card.dataset["playerId"] = slot.playerId;
+
+    card.innerHTML = `
+      ${isCurrent ? '<div class="huc-active-arrow">▼</div>' : ""}
+      <div class="huc-portrait">${portraitHtml}</div>
+      <div class="huc-body">
+        <div class="huc-name">${unitName}</div>
+        <div class="huc-hp-row">
+          <div class="huc-hp-bar"><div class="huc-hp-fill" style="width:${hpPct}%;background:${hpColor}"></div></div>
+          <div class="huc-hp-text">${isDead ? "☠" : curHp}</div>
+        </div>
+        <div class="huc-effects">${effectsHtml}</div>
+      </div>
     `;
 
-    // Tooltip
-    item.title = `${slot.playerId.slice(0, 12)}${unit ? ` — ${UNIT_NAME_KO[unit.metaId as string] ?? unit.metaId}` : ""}`;
+    // Hover: show detail overlay
+    card.addEventListener("mouseenter", (e) => showUnitHoverPanel(e, slot.unitId ?? "", state, playerIds));
+    card.addEventListener("mousemove", (e) => repositionHoverPanel(e));
+    card.addEventListener("mouseleave", () => hideUnitHoverPanel());
 
-    bar.appendChild(item);
+    bar.appendChild(card);
   });
+}
+
+function showUnitHoverPanel(
+  e: MouseEvent,
+  unitId: string,
+  state: GameStateSnapshot,
+  playerIds: string[],
+): void {
+  const panel = document.getElementById("unit-hover-panel");
+  if (!panel || !unitId) return;
+  const unit = state.units[unitId];
+  if (!unit) return;
+
+  const metaId = unit.metaId as string;
+  const pIdx = playerIds.indexOf(unit.playerId as string);
+  const color = PLAYER_COLORS[pIdx >= 0 ? pIdx : 0]!;
+  const unitName = UNIT_NAME_KO[metaId] ?? metaId;
+  const abbr = UNIT_ABBR[metaId] ?? metaId.slice(0, 2).toUpperCase();
+  const meta = availableUnits.find(m => m.id === metaId);
+  const maxHp = meta?.baseHealth ?? 1;
+  const hpPct = unit.alive ? Math.max(0, Math.min(100, (unit.currentHealth / maxHp) * 100)) : 0;
+  const hpColor = hpPct > 60 ? "#4caf50" : hpPct > 30 ? "#ff9800" : "#f44336";
+
+  const portrait = portraitPath(metaId);
+  const portraitHtml = portrait
+    ? `<img src="${portrait}" alt="${unitName}" />`
+    : `<div style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;color:${color};font-weight:700;font-size:16px">${abbr}</div>`;
+
+  const effectsHtml = unit.actionsUsed
+    ? [
+        unit.actionsUsed.moved ? `<span class="uhp-effect">이동 완료</span>` : "",
+        unit.actionsUsed.attacked ? `<span class="uhp-effect">공격 완료</span>` : "",
+        unit.actionsUsed.skillUsed ? `<span class="uhp-effect">스킬 사용</span>` : "",
+      ].filter(Boolean).join("") || `<span class="uhp-no-effects">행동 가능</span>`
+    : `<span class="uhp-no-effects">—</span>`;
+
+  panel.innerHTML = `
+    <div class="uhp-header">
+      <div class="uhp-portrait" style="border-left:3px solid ${color}">${portraitHtml}</div>
+      <div class="uhp-title">
+        <div class="uhp-name" style="color:${color}">${unitName}</div>
+        <div class="uhp-class">${meta?.class ?? "—"} · ${unit.playerId.slice(0, 12)}</div>
+      </div>
+    </div>
+    <div class="uhp-section">
+      <div class="uhp-hp-row">
+        <div class="uhp-hp-bar"><div class="uhp-hp-fill" style="width:${hpPct}%;background:${hpColor}"></div></div>
+        <div class="uhp-hp-text">HP ${unit.currentHealth} / ${maxHp}</div>
+      </div>
+      <div class="uhp-stats">
+        <div class="uhp-stat"><span class="uhp-stat-label">ARM</span><span class="uhp-stat-val">${unit.currentArmor}</span></div>
+        <div class="uhp-stat"><span class="uhp-stat-label">BASE</span><span class="uhp-stat-val">${meta?.baseArmor ?? "—"}</span></div>
+        <div class="uhp-stat"><span class="uhp-stat-label">MOV</span><span class="uhp-stat-val">${meta?.baseMovement ?? "—"}</span></div>
+        <div class="uhp-stat"><span class="uhp-stat-label">POS</span><span class="uhp-stat-val">${unit.position.row},${unit.position.col}</span></div>
+      </div>
+    </div>
+    <div class="uhp-section">
+      <div class="uhp-effects">${effectsHtml}</div>
+    </div>
+  `;
+
+  repositionHoverPanel(e);
+  panel.classList.add("visible");
+}
+
+function repositionHoverPanel(e: MouseEvent): void {
+  const panel = document.getElementById("unit-hover-panel");
+  if (!panel) return;
+  const pw = panel.offsetWidth || 240;
+  const ph = panel.offsetHeight || 180;
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  let left = e.clientX + 12;
+  let top = e.clientY - ph - 8;
+  if (left + pw > vw - 8) left = e.clientX - pw - 12;
+  if (top < 8) top = e.clientY + 16;
+  panel.style.left = `${left}px`;
+  panel.style.top = `${top}px`;
+}
+
+function hideUnitHoverPanel(): void {
+  document.getElementById("unit-hover-panel")?.classList.remove("visible");
 }
 
 // ─── Game rendering ───────────────────────────────────────────────────────────
@@ -1928,11 +2359,24 @@ function submitUnitOrder(orderedIds: string[]): void {
 
 // ─── Bootstrap ────────────────────────────────────────────────────────────────
 
+// Rooms screen
+document.getElementById("rooms-back")?.addEventListener("click", () => {
+  stopRoomsRefresh();
+  showScreen("screen-menu");
+});
+document.getElementById("rooms-refresh")?.addEventListener("click", () => {
+  void refreshRooms();
+});
+document.getElementById("rooms-create-btn")?.addEventListener("click", () => {
+  stopRoomsRefresh();
+  showScreen("screen-menu");
+});
+
 document.getElementById("lobby-back")?.addEventListener("click", () => {
   stopPolling();
   ws.disconnect();
   currentGameId = null;
-  localStorage.removeItem("ab_game_id");
+  sessionStorage.removeItem("ab_game_id");
   // Re-enable the start button so a new game can be created next time
   const startBtn = document.getElementById("start-btn") as HTMLButtonElement | null;
   if (startBtn) startBtn.disabled = false;
@@ -1956,7 +2400,7 @@ document.getElementById("back-to-menu-btn")?.addEventListener("click", () => {
   stopPolling();
   ws.disconnect();
   currentGameId = null;
-  localStorage.removeItem("ab_game_id");
+  sessionStorage.removeItem("ab_game_id");
   logEntries = [];
   placedUnits = [];
   renderLog();
@@ -1967,7 +2411,7 @@ document.getElementById("back-to-menu-btn")?.addEventListener("click", () => {
 // ─── Session restore on page load ─────────────────────────────────────────────
 
 async function tryRestoreSession(): Promise<void> {
-  const savedGameId = localStorage.getItem("ab_game_id");
+  const savedGameId = sessionStorage.getItem("ab_game_id");
   if (!savedGameId) return;
 
   const token = api.getToken();
@@ -1975,7 +2419,7 @@ async function tryRestoreSession(): Promise<void> {
   try {
     await api.login(humanPlayerId);
   } catch {
-    localStorage.removeItem("ab_game_id");
+    sessionStorage.removeItem("ab_game_id");
     return;
   }
 
@@ -1985,12 +2429,12 @@ async function tryRestoreSession(): Promise<void> {
       headers: { Authorization: `Bearer ${api.getToken()}` },
     });
     if (!res.ok) {
-      localStorage.removeItem("ab_game_id");
+      sessionStorage.removeItem("ab_game_id");
       return;
     }
     const data = (await res.json()) as { status: string; state: GameStateSnapshot };
     if (data.status === "ended" || data.state?.phase === "result") {
-      localStorage.removeItem("ab_game_id");
+      sessionStorage.removeItem("ab_game_id");
       return;
     }
 
@@ -2019,7 +2463,7 @@ async function tryRestoreSession(): Promise<void> {
     pollGameState(savedGameId);
     addLog(`세션 복원: ${savedGameId}`);
   } catch {
-    localStorage.removeItem("ab_game_id");
+    sessionStorage.removeItem("ab_game_id");
   }
 }
 

@@ -69,14 +69,21 @@ function loadRegistry(): DataRegistry {
 
 // ─── Store factory helpers ────────────────────────────────────────────────────
 
-function createSessionStore() {
-  const redisUrl = process.env["REDIS_URL"];
-  if (redisUrl !== undefined && redisUrl !== "") {
-    console.info(`[server] Using RedisSessionStore (${redisUrl})`);
+async function createSessionStore() {
+  // Use REDIS_URL env var if set; otherwise default to local Redis
+  const redisUrl = process.env["REDIS_URL"] ?? "redis://localhost:6379";
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { default: Ioredis } = require("ioredis") as typeof import("ioredis");
+    const probe = new Ioredis(redisUrl, { lazyConnect: true, connectTimeout: 1500, maxRetriesPerRequest: 1 });
+    await probe.ping();
+    await probe.quit();
+    console.info(`[server] Redis 연결 성공 → RedisSessionStore (${redisUrl})`);
     return new RedisSessionStore(redisUrl);
+  } catch {
+    console.warn("[server] Redis 연결 실패 → MemorySessionStore로 폴백 (단일 인스턴스 모드)");
+    return new MemorySessionStore();
   }
-  console.info("[server] Using MemorySessionStore");
-  return new MemorySessionStore();
 }
 
 function createStatsStore() {
@@ -119,7 +126,7 @@ export async function buildServer() {
 
   const registry     = loadRegistry();
   const factory      = new GameFactory(registry);
-  const sessionStore = createSessionStore();
+  const sessionStore = await createSessionStore();
   const statsStore   = createStatsStore();
   const tokenStore   = createTokenStore();
 

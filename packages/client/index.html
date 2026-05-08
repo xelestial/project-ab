@@ -67,16 +67,7 @@
     .screen { display: none; }
     .screen.active { display: block; }
 
-    /* 게임 화면만 flex 컬럼으로 — viewport 100% 채우기 */
-    #screen-game.active {
-      display: flex;
-      flex-direction: column;
-      height: 100%;
-      overflow: hidden;
-      padding: 0.5rem;
-      gap: 0.5rem;
-      box-sizing: border-box;
-    }
+    /* 게임 화면만 flex 컬럼으로 — viewport 100% 채우기 (overridden below) */
 
     /* ── Main menu ── */
     .menu-grid {
@@ -286,94 +277,250 @@
     .ready-btn:disabled { opacity: 0.35; cursor: not-allowed; }
     .ready-btn:not(:disabled):hover { opacity: 0.85; }
 
-    /* ── Game view ── */
-    .turn-order-bar { flex-shrink: 0; }   /* turn-order-bar 고정, 줄어들지 않음 */
+    /* ── Game screen: header hidden, full area for HUD+board ── */
+    #screen-game.active {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      overflow: hidden;
+      padding: 0;
+      gap: 0;
+    }
 
-    .game-layout {
-      flex: 1;          /* 남은 세로 공간 모두 차지 */
-      min-height: 0;    /* flex 자식이 overflow 없이 줄어들 수 있게 */
-      display: grid;
-      grid-template-columns: 1fr 260px;
-      gap: 0.75rem;
+    /* ── Game HUD (top horizontal bar) ── */
+    .game-hud {
+      flex-shrink: 0;
+      display: flex;
+      align-items: stretch;
+      background: var(--surface);
+      border-bottom: 2px solid var(--border);
+      height: 88px;
       overflow: hidden;
     }
-    .board-wrap {
+
+    /* Left: round/turn/pass */
+    .hud-meta {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 2px;
+      padding: 0 14px;
+      min-width: 140px;
+      border-right: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .hud-round { font-size: 0.72rem; color: var(--text2); text-transform: uppercase; letter-spacing: 0.06em; }
+    .hud-turn-label { font-size: 0.95rem; font-weight: 700; color: var(--accent); white-space: nowrap; }
+    .hud-pass-btn {
+      margin-top: 4px;
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--text2);
+      border-radius: 5px;
+      padding: 2px 8px;
+      font-size: 0.72rem;
+      cursor: pointer;
+      text-align: left;
+    }
+    .hud-pass-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+    /* Center: unit cards */
+    .hud-units {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 6px 10px;
+      overflow-x: auto;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border) transparent;
+    }
+    .hud-divider {
+      width: 1px; height: 60px;
+      background: var(--border);
+      flex-shrink: 0;
+      margin: 0 6px;
+    }
+
+    /* Individual unit card in HUD */
+    .hud-unit-card {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 8px 4px 5px;
+      border-radius: 8px;
+      border: 1.5px solid var(--border);
+      border-left: 3px solid var(--team-color, var(--border));
+      background: var(--surface2);
+      cursor: pointer;
+      flex-shrink: 0;
+      min-width: 120px;
+      max-width: 150px;
+      transition: border-color 0.15s, box-shadow 0.15s, opacity 0.15s;
+      position: relative;
+    }
+    .hud-unit-card:hover { border-color: var(--team-color, var(--accent)); box-shadow: 0 0 8px var(--team-color, var(--accent))44; }
+    .hud-unit-card.huc-active {
+      border-color: var(--team-color, var(--accent));
+      box-shadow: 0 0 12px var(--team-color, var(--accent))66;
+      background: color-mix(in srgb, var(--team-color, var(--accent)) 12%, var(--surface2));
+    }
+    .hud-unit-card.huc-past { opacity: 0.45; }
+    .hud-unit-card.huc-dead { opacity: 0.2; }
+
+    .huc-portrait {
+      width: 36px; height: 44px;
+      border-radius: 5px;
+      overflow: hidden;
+      flex-shrink: 0;
       background: var(--surface);
       border: 1px solid var(--border);
-      border-radius: 10px;
-      overflow: hidden;   /* 스크롤바 제거 — canvas가 CSS로 축소됨 */
-      padding: 0.5rem;
+    }
+    .huc-portrait img { width: 100%; height: 100%; object-fit: cover; object-position: center top; display: block; }
+    .huc-portrait-fallback {
+      width: 100%; height: 100%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.7rem; font-weight: 700; color: var(--text2);
+    }
+    .huc-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+    .huc-name { font-size: 0.75rem; font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .huc-hp-row { display: flex; align-items: center; gap: 4px; }
+    .huc-hp-bar { flex: 1; height: 5px; background: var(--border); border-radius: 3px; overflow: hidden; }
+    .huc-hp-fill { height: 100%; border-radius: 3px; transition: width 0.3s; }
+    .huc-hp-text { font-size: 0.65rem; color: var(--text2); white-space: nowrap; flex-shrink: 0; }
+    .huc-effects { display: flex; flex-wrap: wrap; gap: 2px; min-height: 14px; }
+    .huc-effect { font-size: 0.6rem; padding: 1px 3px; border-radius: 3px; background: var(--border); color: var(--text2); }
+    .huc-effect.effect-fire { background: #b71c1c44; color: #f44336; }
+    .huc-effect.effect-ice, .huc-effect.effect-freeze { background: #01579b44; color: #29b6f6; }
+    .huc-effect.effect-electric { background: #f57f1744; color: #ffd54f; }
+    .huc-effect.effect-acid { background: #33691e44; color: #aed581; }
+    .huc-active-arrow {
+      position: absolute; top: -8px; left: 50%; transform: translateX(-50%);
+      font-size: 8px; color: var(--success);
+    }
+
+    /* Right: log */
+    .hud-log {
+      width: 200px;
+      flex-shrink: 0;
+      border-left: 1px solid var(--border);
+      padding: 6px 10px;
+      overflow: hidden;
+    }
+    .hud-log-title { font-size: 0.65rem; color: var(--text2); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
+    .log-list {
+      display: flex; flex-direction: column; gap: 2px;
+      overflow: hidden; max-height: 68px;
+    }
+    .log-entry { font-size: 0.68rem; color: var(--text2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    /* ── Board (fills remaining height) ── */
+    .board-wrap {
+      flex: 1;
+      min-height: 0;
+      min-width: 0;
+      background: var(--bg);
+      overflow: hidden;
       display: flex;
       align-items: center;
       justify-content: center;
-      min-height: 0;
-      min-width: 0;
     }
-    /* canvas 픽셀 해상도는 JS가 유지, CSS로 컨테이너 내에 맞춤 */
     #board-canvas {
       display: block;
       max-width: 100%;
       max-height: 100%;
-      object-fit: contain; /* 비율 유지 (브라우저 지원 시) */
     }
 
-    .side-panel {
-      display: flex;
-      flex-direction: column;
-      gap: 0.75rem;
-      overflow-y: auto;   /* 사이드패널만 세로 스크롤 허용 */
-      min-height: 0;
-    }
-    .panel-box {
-      background: var(--surface);
+    /* ── Unit info floating panel (click on board unit) ── */
+    #unit-info-panel {
+      position: fixed;
+      z-index: 500;
+      bottom: 16px; left: 16px;
+      background: rgba(22,27,34,0.96);
       border: 1px solid var(--border);
       border-radius: 10px;
-      padding: 1rem;
-    }
-    .panel-box h3 { font-size: 0.85rem; color: var(--text2); margin-bottom: 0.6rem; text-transform: uppercase; letter-spacing: 0.05em; }
-
-    .turn-indicator { font-size: 1rem; font-weight: 600; color: var(--accent); }
-
-    .players-list { display: flex; flex-direction: column; gap: 0.5rem; }
-    .player-row {
-      display: flex; align-items: center; gap: 0.5rem;
-      padding: 0.3rem; border-radius: 6px; font-size: 0.85rem;
-    }
-    .player-row.active { background: var(--surface2); }
-    .player-dot {
-      width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
-    }
-    .player-dot.p0 { background: var(--team-a); }
-    .player-dot.p1 { background: var(--team-b); }
-    .player-dot.p2 { background: #a371f7; }
-    .player-dot.p3 { background: #e3b341; }
-
-    .log-list {
-      max-height: 200px; overflow-y: auto;
-      display: flex; flex-direction: column; gap: 0.3rem;
-    }
-    .log-entry { font-size: 0.78rem; color: var(--text2); border-bottom: 1px solid var(--border); padding-bottom: 0.2rem; }
-
-    .game-over-banner {
-      background: var(--surface2);
-      border: 2px solid var(--success);
-      border-radius: 12px;
-      padding: 1.5rem;
-      text-align: center;
-      margin-bottom: 1rem;
-    }
-    .game-over-banner h2 { color: var(--success); font-size: 1.5rem; }
-    .game-over-banner p { color: var(--text2); margin-top: 0.4rem; }
-
-    /* ── Unit info panel ── */
-    #unit-info-panel {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 6px;
       padding: 10px;
-      min-height: 120px;
       font-size: 12px;
+      min-width: 200px;
+      max-width: 260px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+      backdrop-filter: blur(6px);
+      display: none;
     }
+    #unit-info-panel.visible { display: block; }
+
+    /* ── Unit hover overlay (HUD card mouseover) ── */
+    #unit-hover-panel {
+      position: fixed;
+      z-index: 9000;
+      pointer-events: none;
+      background: rgba(13,17,23,0.97);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 14px;
+      font-size: 12px;
+      min-width: 220px;
+      max-width: 280px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.7);
+      display: none;
+    }
+    #unit-hover-panel.visible { display: block; }
+    .uhp-header { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+    .uhp-portrait { width: 48px; height: 58px; border-radius: 6px; overflow: hidden; flex-shrink: 0; background: var(--surface2); border: 1px solid var(--border); }
+    .uhp-portrait img { width: 100%; height: 100%; object-fit: cover; object-position: center top; }
+    .uhp-title { flex: 1; }
+    .uhp-name { font-size: 14px; font-weight: 700; }
+    .uhp-class { font-size: 11px; color: var(--text2); text-transform: capitalize; }
+    .uhp-section { border-top: 1px solid var(--border); padding-top: 6px; margin-top: 6px; }
+    .uhp-hp-row { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; }
+    .uhp-hp-bar { flex: 1; height: 7px; background: var(--border); border-radius: 4px; overflow: hidden; }
+    .uhp-hp-fill { height: 100%; border-radius: 4px; }
+    .uhp-hp-text { font-size: 11px; color: var(--text2); white-space: nowrap; }
+    .uhp-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 12px; margin-bottom: 5px; }
+    .uhp-stat { display: flex; gap: 5px; align-items: center; font-size: 11px; }
+    .uhp-stat-label { color: var(--text2); width: 30px; flex-shrink: 0; }
+    .uhp-stat-val { font-weight: 700; }
+    .uhp-weapon { display: flex; gap: 4px; margin-bottom: 5px; flex-wrap: wrap; }
+    .uhp-badge { padding: 1px 5px; border-radius: 3px; font-size: 10px; background: var(--border); color: var(--text2); }
+    .uhp-badge.melee { background: #b71c1c22; color: #f44336; border: 1px solid #f44336; }
+    .uhp-badge.ranged { background: #0d47a122; color: #2196f3; border: 1px solid #2196f3; }
+    .uhp-badge.artillery { background: #e6510033; color: #ff9800; border: 1px solid #ff9800; }
+    .uhp-effects { display: flex; flex-wrap: wrap; gap: 3px; margin-bottom: 4px; min-height: 16px; }
+    .uhp-effect { padding: 1px 5px; border-radius: 3px; font-size: 10px; }
+    .uhp-effect.effect-fire { background: #b71c1c44; color: #f44336; }
+    .uhp-effect.effect-ice,.uhp-effect.effect-freeze { background: #01579b44; color: #29b6f6; }
+    .uhp-effect.effect-electric { background: #f57f1744; color: #ffd54f; }
+    .uhp-effect.effect-acid { background: #33691e44; color: #aed581; }
+    .uhp-skills { display: flex; flex-direction: column; gap: 3px; }
+    .uhp-skill { font-size: 11px; display: flex; align-items: center; gap: 6px; padding: 3px 0; }
+    .uhp-skill-name { font-weight: 600; }
+    .uhp-skill-desc { color: var(--text2); }
+    .uhp-no-effects { color: var(--text2); font-size: 10px; font-style: italic; }
+
+    /* ── Game over overlay ── */
+    .game-over-overlay {
+      position: fixed; inset: 0; z-index: 1000;
+      background: rgba(0,0,0,0.8);
+      display: flex; align-items: center; justify-content: center;
+      backdrop-filter: blur(4px);
+    }
+    .game-over-overlay.hidden { display: none !important; }
+    .game-over-banner {
+      background: var(--surface);
+      border: 2px solid var(--success);
+      border-radius: 16px;
+      padding: 2.5rem 3rem;
+      text-align: center;
+      max-width: 400px;
+    }
+    .game-over-banner h2 { color: var(--success); font-size: 1.8rem; }
+    .game-over-banner p { color: var(--text2); margin-top: 0.6rem; }
+
+    /* ── Turn order bar wrapper (transparent — children sit in .hud-units) ── */
+    .turn-order-bar { display: contents; }
+    .players-list { display: none; }
+
+    /* ── Unit info panel styles ── */
     .unit-info-empty { color: var(--text2); font-style: italic; padding: 8px 0; }
     .unit-info-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
     .unit-info-icon { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff; font-weight: bold; font-size: 13px; flex-shrink: 0; }
@@ -403,18 +550,6 @@
     .unit-info-actions { font-size: 11px; }
     .action-used { color: var(--text2); }
     .action-avail { color: var(--success); }
-
-    /* ── Turn order bar (DOS2-style) ── */
-    .turn-order-bar {
-      display: flex;
-      gap: 4px;
-      padding: 6px 8px;
-      background: var(--surface);
-      border-bottom: 1px solid var(--border);
-      overflow-x: auto;
-      min-height: 44px;
-      align-items: center;
-    }
     .turn-slot {
       display: flex;
       flex-direction: column;
@@ -587,6 +722,215 @@
       50%       { transform: rotate(12deg); }
     }
 
+    /* ── Online lobby (rooms browser) ── */
+    #screen-rooms.active {
+      height: 100%;
+      overflow-y: auto;
+      padding: 1.5rem 2rem;
+      max-width: 1400px;
+      margin: 0 auto;
+      box-sizing: border-box;
+    }
+
+    .rooms-header {
+      display: flex;
+      align-items: center;
+      gap: 0.8rem;
+      margin-bottom: 1rem;
+      flex-wrap: wrap;
+    }
+    .rooms-header h2 { flex: 1; font-size: 1.3rem; min-width: 120px; }
+
+    .refresh-btn {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--text2);
+      border-radius: 8px;
+      padding: 0.4rem 0.8rem;
+      cursor: pointer;
+      font-size: 0.85rem;
+      transition: all 0.15s;
+    }
+    .refresh-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .refresh-btn.spinning { animation: spin 0.7s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .rooms-meta {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+      padding: 0.65rem 1rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 0.85rem;
+      color: var(--text2);
+      flex-wrap: wrap;
+    }
+    .rooms-meta .player-id-val {
+      color: var(--accent);
+      font-family: monospace;
+      font-weight: 600;
+    }
+    .rooms-count-badge {
+      margin-left: auto;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 0.15rem 0.65rem;
+      font-size: 0.75rem;
+      color: var(--text2);
+    }
+
+    /* ── Room cards grid ── */
+    .rooms-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
+
+    .room-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.1rem 1.2rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.65rem;
+      transition: border-color 0.15s, transform 0.1s, box-shadow 0.15s;
+    }
+    .room-card:hover { border-color: var(--accent); transform: translateY(-2px); box-shadow: 0 4px 16px rgba(88,166,255,0.1); }
+
+    .room-card-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 0.5rem;
+    }
+    .room-card-title { font-size: 1rem; font-weight: 700; line-height: 1.3; }
+
+    .room-status-row {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      flex-shrink: 0;
+    }
+    .room-status-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+    }
+    .room-status-dot.waiting {
+      background: var(--success);
+      box-shadow: 0 0 5px var(--success);
+    }
+    .room-status-dot.running { background: var(--warn); }
+    .room-status-dot.ended   { background: var(--text2); }
+    .room-status-text { font-size: 0.75rem; color: var(--text2); white-space: nowrap; }
+
+    .room-card-id {
+      font-size: 0.7rem;
+      color: var(--text2);
+      font-family: monospace;
+      background: var(--surface2);
+      border-radius: 4px;
+      padding: 0.15rem 0.45rem;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .room-slots {
+      display: flex;
+      gap: 1.2rem;
+      font-size: 0.82rem;
+      color: var(--text2);
+    }
+    .room-slots strong { color: var(--text); }
+
+    .room-progress-wrap { display: flex; flex-direction: column; gap: 3px; }
+    .room-progress-label { font-size: 0.7rem; color: var(--text2); display: flex; justify-content: space-between; }
+    .room-progress-bar {
+      background: var(--surface2);
+      border-radius: 4px;
+      height: 4px;
+      overflow: hidden;
+    }
+    .room-progress-fill {
+      height: 100%;
+      border-radius: 4px;
+      background: var(--accent);
+      transition: width 0.4s;
+    }
+
+    .room-created { font-size: 0.7rem; color: var(--text2); }
+
+    .join-btn {
+      margin-top: 0.2rem;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 0.55rem 1rem;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.15s;
+      width: 100%;
+    }
+    .join-btn:not(:disabled):hover { opacity: 0.85; }
+    .join-btn:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
+      background: var(--border);
+      color: var(--text2);
+    }
+
+    .rooms-empty {
+      grid-column: 1 / -1;
+      text-align: center;
+      padding: 3rem 2rem;
+      color: var(--text2);
+      font-size: 0.95rem;
+      background: var(--surface);
+      border: 1px dashed var(--border);
+      border-radius: 12px;
+    }
+    .rooms-empty p { margin-top: 0.6rem; font-size: 0.85rem; }
+
+    /* ── Online lobby button in main menu ── */
+    .online-lobby-banner {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      background: linear-gradient(135deg, rgba(88,166,255,0.08) 0%, rgba(88,166,255,0.02) 100%);
+      border: 1px solid rgba(88,166,255,0.35);
+      border-radius: 12px;
+      padding: 1rem 1.4rem;
+      margin-bottom: 1rem;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s, transform 0.1s;
+    }
+    .online-lobby-banner:hover {
+      border-color: var(--accent);
+      background: rgba(88,166,255,0.12);
+      transform: translateY(-1px);
+    }
+    .online-lobby-icon { font-size: 1.6rem; flex-shrink: 0; }
+    .online-lobby-text { flex: 1; }
+    .online-lobby-text h3 { font-size: 1rem; font-weight: 700; color: var(--accent); margin-bottom: 2px; }
+    .online-lobby-text p  { font-size: 0.8rem; color: var(--text2); }
+    .online-lobby-arrow { font-size: 1.2rem; color: var(--accent); flex-shrink: 0; }
+
+    .menu-section-label {
+      font-size: 0.8rem;
+      color: var(--text2);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin: 1.2rem 0 0.6rem;
+    }
+
     /* ── Util ── */
     .hidden { display: none !important; }
     .tag {
@@ -624,8 +968,30 @@
   <main>
     <!-- Main Menu -->
     <div id="screen-menu" class="screen active">
-      <h2 style="color:var(--text2);font-size:0.9rem;text-transform:uppercase;letter-spacing:0.1em;">게임 모드 선택</h2>
+      <div id="menu-lobby-banner"></div>
+      <div class="menu-section-label">새 게임 만들기</div>
       <div class="menu-grid" id="menu-grid"></div>
+    </div>
+
+    <!-- Online Rooms Browser -->
+    <div id="screen-rooms" class="screen">
+      <div class="rooms-header">
+        <button class="back-btn" id="rooms-back">← 뒤로</button>
+        <h2>온라인 로비</h2>
+        <button class="refresh-btn" id="rooms-refresh" title="새로고침">↻</button>
+        <button class="start-btn" id="rooms-create-btn">+ 새 게임</button>
+      </div>
+      <div class="rooms-meta">
+        <span>내 ID: <span class="player-id-val" id="rooms-player-id">—</span></span>
+        <span class="rooms-count-badge" id="rooms-count">0개 방</span>
+      </div>
+      <div class="rooms-grid" id="rooms-grid">
+        <div class="rooms-empty">
+          <div style="font-size:2rem">🎮</div>
+          <p>열린 방을 불러오는 중...</p>
+        </div>
+      </div>
+      <div class="status-msg" id="rooms-status"></div>
     </div>
 
     <!-- Lobby -->
@@ -667,39 +1033,41 @@
 
     <!-- Game View -->
     <div id="screen-game" class="screen">
-      <div id="turn-order-bar" class="turn-order-bar"></div>
-      <div class="game-layout">
-        <div class="board-wrap">
-          <canvas id="board-canvas"></canvas>
+      <!-- Top HUD bar -->
+      <div class="game-hud">
+        <div class="hud-meta">
+          <div class="hud-round" id="round-indicator">라운드 1</div>
+          <div class="hud-turn-label" id="turn-indicator">—</div>
+          <button id="pass-btn" class="hud-pass-btn" style="display:none;">⏭ 패스</button>
         </div>
-        <div class="side-panel">
-          <div id="game-over-container" class="hidden">
-            <div class="game-over-banner">
-              <h2>🏆 게임 종료</h2>
-              <p id="game-over-msg"></p>
-              <button class="start-btn" id="back-to-menu-btn" style="margin-top:1rem;">메인 메뉴로</button>
-            </div>
-          </div>
-          <div class="panel-box">
-            <h3>현재 턴</h3>
-            <div class="turn-indicator" id="turn-indicator">—</div>
-            <div style="font-size:0.8rem;color:var(--text2);margin-top:0.3rem;" id="round-indicator"></div>
-            <button id="pass-btn" style="display:none;margin-top:0.8rem;width:100%;padding:0.5rem;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text2);cursor:pointer;font-size:0.85rem;" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">⏭ 패스 (턴 넘기기)</button>
-          </div>
-          <div class="panel-box">
-            <h3>유닛 정보</h3>
-            <div id="unit-info-panel">
-              <div class="unit-info-empty">유닛을 클릭하면 정보가 표시됩니다</div>
-            </div>
-          </div>
-          <div class="panel-box">
-            <h3>플레이어</h3>
-            <div class="players-list" id="players-list"></div>
-          </div>
-          <div class="panel-box">
-            <h3>로그</h3>
-            <div class="log-list" id="log-list"></div>
-          </div>
+        <div class="hud-units">
+          <div id="turn-order-bar" class="turn-order-bar"></div>
+        </div>
+        <div class="hud-log">
+          <div class="hud-log-title">전투 로그</div>
+          <div class="log-list" id="log-list"></div>
+        </div>
+      </div>
+
+      <!-- Full-height board -->
+      <div class="board-wrap">
+        <canvas id="board-canvas"></canvas>
+      </div>
+
+      <!-- Floating unit info panel (canvas click) -->
+      <div id="unit-info-panel">
+        <div class="unit-info-empty">유닛을 클릭하면 정보가 표시됩니다</div>
+      </div>
+
+      <!-- Unit hover detail overlay (HUD card mouseover) -->
+      <div id="unit-hover-panel"></div>
+
+      <!-- Game over overlay -->
+      <div id="game-over-container" class="game-over-overlay hidden">
+        <div class="game-over-banner">
+          <h2>🏆 게임 종료</h2>
+          <p id="game-over-msg"></p>
+          <button class="start-btn" id="back-to-menu-btn" style="margin-top:1rem;">메인 메뉴로</button>
         </div>
       </div>
     </div>

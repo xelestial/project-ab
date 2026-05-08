@@ -61,7 +61,11 @@ export async function registerWsRoutes(
         }
 
         if (msg.type === "join") {
-          const session = sessionManager.getSession(msg.gameId);
+          // Try in-memory first; attempt store recovery if absent (server restart)
+          let session = sessionManager.getSession(msg.gameId);
+          if (session === undefined) {
+            session = await sessionManager.recoverFromStore(msg.gameId, factory);
+          }
           if (session === undefined) {
             socket.send(
               encodeMessage({
@@ -151,7 +155,10 @@ export async function registerWsRoutes(
         }
 
         if (msg.type === "spectate") {
-          const session = sessionManager.getSession(msg.gameId);
+          let session = sessionManager.getSession(msg.gameId);
+          if (session === undefined) {
+            session = await sessionManager.recoverFromStore(msg.gameId, factory);
+          }
           if (session === undefined) {
             socket.send(
               encodeMessage({
