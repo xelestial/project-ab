@@ -42,12 +42,15 @@ type WsMessage =
   | { type: "state_update"; gameId: string; state: GameStateSnapshot }
   | { type: "game_end"; gameId: string; winnerIds: string[]; reason: string }
   | { type: "request_unit_order"; gameId: string; aliveUnitIds: string[]; timeoutMs: number }
+  | { type: "placement_selections"; gameId: string; selections: Record<string, string[]> }
   | { type: "error"; code: string; message: string }
   | { type: "pong" };
 
 export type StateUpdateHandler = (state: GameStateSnapshot) => void;
 export type GameEndHandler = (winnerIds: string[], reason: string) => void;
 export type UnitOrderRequestHandler = (aliveUnitIds: string[], timeoutMs: number) => void;
+/** playerId → list of metaIds currently selected/placed by that player */
+export type PlacementSelectionsHandler = (selections: Record<string, string[]>) => void;
 
 export class WsClient {
   private ws: WebSocket | null = null;
@@ -56,6 +59,7 @@ export class WsClient {
   private onGameEnd: GameEndHandler | null = null;
   private onJoined: (() => void) | null = null;
   private onUnitOrderRequest: UnitOrderRequestHandler | null = null;
+  private onPlacementSelections: PlacementSelectionsHandler | null = null;
   private pingInterval: ReturnType<typeof setInterval> | null = null;
 
   connect(
@@ -67,6 +71,7 @@ export class WsClient {
       onStateUpdate?: StateUpdateHandler;
       onGameEnd?: GameEndHandler;
       onUnitOrderRequest?: UnitOrderRequestHandler;
+      onPlacementSelections?: PlacementSelectionsHandler;
       token?: string;
     },
   ): void {
@@ -75,6 +80,7 @@ export class WsClient {
     this.onStateUpdate = handlers.onStateUpdate ?? null;
     this.onGameEnd = handlers.onGameEnd ?? null;
     this.onUnitOrderRequest = handlers.onUnitOrderRequest ?? null;
+    this.onPlacementSelections = handlers.onPlacementSelections ?? null;
 
     this.ws = new WebSocket(`${wsBaseUrl}/ws/game/${gameId}`);
 
@@ -111,6 +117,9 @@ export class WsClient {
         case "request_unit_order":
           this.onUnitOrderRequest?.(msg.aliveUnitIds, msg.timeoutMs);
           break;
+        case "placement_selections":
+          this.onPlacementSelections?.(msg.selections as Record<string, string[]>);
+          break;
       }
     };
 
@@ -125,6 +134,15 @@ export class WsClient {
 
   sendUnitOrder(gameId: string, unitOrder: string[]): void {
     this.send({ type: "unit_order", gameId, unitOrder });
+  }
+
+  /**
+   * Broadcast current placement selection to teammates.
+   * Call whenever the player selects, deselects, or places a unit.
+   * @param metaIds - all metaIds currently placed OR actively selected
+   */
+  sendPlacementUpdate(gameId: string, playerId: string, metaIds: string[]): void {
+    this.send({ type: "placement_update", gameId, playerId, metaIds });
   }
 
   get connected(): boolean {

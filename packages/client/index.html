@@ -235,6 +235,18 @@
     .unit-card:hover { border-color: var(--accent); }
     .unit-card.selected { border-color: var(--accent); background: rgba(88,166,255,0.1); }
     .unit-card.used { opacity: 0.35; cursor: not-allowed; pointer-events: none; }
+    .unit-card.teammate-taken {
+      opacity: 0.5; cursor: not-allowed; pointer-events: none;
+      border-color: #f59e0b;
+      background: rgba(245,158,11,0.07);
+    }
+    .unit-card.teammate-taken:hover { border-color: #f59e0b; }
+    .teammate-taken-badge {
+      font-size: 0.65rem; font-weight: 600;
+      color: #f59e0b;
+      margin-top: 0.2rem;
+      letter-spacing: 0.03em;
+    }
     .unit-abbr {
       width: 32px; height: 32px;
       border-radius: 50%;
