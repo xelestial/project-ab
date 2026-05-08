@@ -713,6 +713,7 @@ function drawUnit(
       ctx.restore();
       ctx.globalAlpha = dead ? 0.25 : 1;
     }
+
     ctx.drawImage(spriteImg, drawX, drawY, spriteW, spriteH);
 
     // Collect badge for second-pass overlap-resolved rendering

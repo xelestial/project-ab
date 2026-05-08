@@ -147,7 +147,9 @@ function startOrderWatcher(page) {
   }).catch(() => {});
 }
 
-const COMPUTE_TARGETS = `(function() {
+/** Generate canvas click targets for ONLY the given team's half. */
+function computeTargetsForTeam(teamIndex) {
+  return `(function() {
   const canvas = document.getElementById("placement-canvas");
   if (!canvas) return [];
   const rect = canvas.getBoundingClientRect();
@@ -159,21 +161,43 @@ const COMPUTE_TARGETS = `(function() {
   const cx = cW / 2, cy = HH + 4 + spriteTopPad;
   const scaleX = rect.width / cW, scaleY = rect.height / canvas.height;
   const half = Math.floor(gridSize / 2);
-  const out = [];
-  for (let th = 0; th <= 1; th++) {
-    const rowStart = th === 0 ? 0 : half;
-    const rowEnd   = th === 0 ? half - 1 : gridSize - 1;
-    const pts = [];
-    for (let row = rowStart; row <= rowEnd; row++)
-      for (let col = 1; col < gridSize - 1; col++) {
-        const sx = cx + (col - row) * HW, sy = cy + (col + row) * HH;
-        pts.push({ x: rect.left + sx * scaleX, y: rect.top + sy * scaleY, row, col, th });
-      }
-    const step = Math.ceil(pts.length / 15);
-    for (let i = 0; i < pts.length; i += step) out.push(pts[i]);
-  }
-  return out;
+  const th = ${teamIndex};
+  const rowStart = th === 0 ? 0 : half;
+  const rowEnd   = th === 0 ? half - 1 : gridSize - 1;
+  const pts = [];
+  for (let row = rowStart; row <= rowEnd; row++)
+    for (let col = 1; col < gridSize - 1; col++) {
+      const sx = cx + (col - row) * HW, sy = cy + (col + row) * HH;
+      pts.push({ x: rect.left + sx * scaleX, y: rect.top + sy * scaleY, row, col });
+    }
+  // Return all valid tiles (not just sampled), to ensure enough targets
+  return pts;
 })()`;
+}
+
+/**
+ * Click the canvas at the given isometric grid (row, col).
+ * Recomputes canvas rect fresh each call so layout shifts don't break targeting.
+ */
+async function clickGridCell(page, row, col) {
+  const vp = await page.evaluate(({ row, col }) => {
+    const canvas = document.getElementById("placement-canvas");
+    if (!canvas) return null;
+    const rect = canvas.getBoundingClientRect();
+    const cW = canvas.width;
+    const gridSize = 11;
+    const TW = cW / (gridSize + 1);
+    const HW = TW / 2, HH = TW / 4;
+    const spriteTopPad = Math.round(HW * 3.5);
+    const cx = cW / 2, cy = HH + 4 + spriteTopPad;
+    const scaleX = rect.width / cW, scaleY = rect.height / canvas.height;
+    const sx = cx + (col - row) * HW;
+    const sy = cy + (col + row) * HH;
+    return { x: rect.left + sx * scaleX, y: rect.top + sy * scaleY };
+  }, { row, col });
+  if (!vp) return;
+  await page.mouse.click(vp.x, vp.y);
+}
 
 async function placeUnits(page, name) {
   const maxUnits = parseInt(
@@ -181,20 +205,45 @@ async function placeUnits(page, name) {
   ) || 3;
   log(name, `Placing ${maxUnits} units`);
 
-  const clickTargets = await page.evaluate(COMPUTE_TARGETS);
-  let placed = 0;
+  // Determine this player's team half
+  const teamIndex = await page.evaluate(() => {
+    return parseInt(sessionStorage.getItem("ab_team_index") ?? "0", 10);
+  }).catch(() => 0);
 
-  for (const target of clickTargets) {
-    if (placed >= maxUnits) break;
-    const hasSelected = await page.$(".unit-card.selected");
+  // Build a list of (row, col) pairs for this team's half (inner columns only)
+  const gridSize = 11;
+  const half = Math.floor(gridSize / 2);
+  const rowStart = teamIndex === 0 ? 0 : half;
+  const rowEnd   = teamIndex === 0 ? half - 1 : gridSize - 1;
+  const candidateTiles = [];
+  for (let row = rowStart; row <= rowEnd; row++)
+    for (let col = 2; col < gridSize - 2; col++) // avoid edge tiles
+      candidateTiles.push({ row, col });
+
+  let placed = 0;
+  let tileIdx = 0;
+
+  while (placed < maxUnits && tileIdx < candidateTiles.length) {
+    // Select a unit card if none is selected
+    const hasSelected = await page.locator(".unit-card.selected").count();
     if (!hasSelected) {
-      const card = await page.$(".unit-card:not(.used)");
-      if (!card) { log(name, "No unit cards left"); break; }
-      await card.click();
-      await page.waitForTimeout(60);
+      const availableCards = page.locator(".unit-card:not(.used):not(.teammate-taken)");
+      const count = await availableCards.count();
+      if (count === 0) {
+        const total = await page.locator(".unit-card").count();
+        const used  = await page.locator(".unit-card.used").count();
+        const taken = await page.locator(".unit-card.teammate-taken").count();
+        log(name, `No unit cards left (total=${total} used=${used} taken=${taken})`);
+        break;
+      }
+      await availableCards.first().click();
+      await page.waitForTimeout(100);
     }
-    await page.mouse.click(target.x, target.y);
-    await page.waitForTimeout(80);
+
+    // Click next tile
+    const tile = candidateTiles[tileIdx++];
+    await clickGridCell(page, tile.row, tile.col);
+    await page.waitForTimeout(100);
     const now = parseInt(
       await page.$eval("#placement-counter", (el) => el.textContent ?? "0"), 10,
     );
@@ -265,13 +314,14 @@ async function main() {
   }
 
   // ── 4. Place units ───────────────────────────────────────────────────────
+  // Teammates (P1↔P2, P3↔P4) must pick different units, so they go in order.
+  // Cross-team pairs (P1↔P3, P2↔P4) can overlap freely.
   console.log("\n══ 4. Placing units ══");
-  await Promise.all([
-    placeUnits(p1, "P1"),
-    placeUnits(p2, "P2"),
-    placeUnits(p3, "P3"),
-    placeUnits(p4, "P4"),
-  ]);
+  // P1 and P3 go first (one per team); wait for their WS broadcasts to settle;
+  // then P2 and P4 see their teammate's locked units before selecting.
+  await Promise.all([placeUnits(p1, "P1"), placeUnits(p3, "P3")]);
+  await new Promise(r => setTimeout(r, 800)); // let placement_selections reach P2/P4
+  await Promise.all([placeUnits(p2, "P2"), placeUnits(p4, "P4")]);
 
   // ── 5. Wait for battle screen ────────────────────────────────────────────
   console.log("\n══ 5. Waiting for battle ══");
