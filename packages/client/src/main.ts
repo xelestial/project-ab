@@ -631,6 +631,7 @@ function drawUnit(
   unitName: string = "",
   badgeCollector?: BadgeSpec[],
   currentHealth?: number,
+  selectionColor?: string,
 ): void {
   const cx = sx;
   const cy = sy + HH + DEPTH / 2;
@@ -645,6 +646,30 @@ function drawUnit(
   // Feet anchored at front vertex of tile top face (sx, sy + HH*2)
   const feetY = sy + HH * 2;
 
+  // ── Selection ring at feet (drawn before sprite) ─────────────────────────
+  if (selectionColor && !dead) {
+    ctx.save();
+    const ringRX = r * 1.25;
+    const ringRY = ringRX * 0.32;
+    const ringY  = feetY - HH * 0.3;
+    ctx.shadowColor = selectionColor;
+    ctx.shadowBlur  = 14;
+    ctx.beginPath();
+    ctx.ellipse(cx, ringY, ringRX, ringRY, 0, 0, Math.PI * 2);
+    ctx.strokeStyle = selectionColor;
+    ctx.lineWidth   = 2.5;
+    ctx.globalAlpha = 0.9;
+    ctx.stroke();
+    ctx.shadowBlur  = 6;
+    ctx.beginPath();
+    ctx.ellipse(cx, ringY, ringRX * 0.6, ringRY * 0.6, 0, 0, Math.PI * 2);
+    ctx.fillStyle = selectionColor;
+    ctx.globalAlpha = 0.25;
+    ctx.fill();
+    ctx.restore();
+    ctx.globalAlpha = dead ? 0.25 : 1;
+  }
+
   if (spriteImg !== null && spriteImg.complete && spriteImg.naturalWidth > 0) {
     const spriteH = HW * 3.5;
     const spriteW = spriteH * (404 / 1008);
@@ -656,6 +681,17 @@ function drawUnit(
     ctx.ellipse(cx, feetY - HH * 0.3, r * 0.7, r * 0.22, 0, 0, Math.PI * 2);
     ctx.fillStyle = "rgba(0,0,0,0.35)";
     ctx.fill();
+
+    // Sprite glow when selected
+    if (selectionColor && !dead) {
+      ctx.save();
+      ctx.shadowColor = selectionColor;
+      ctx.shadowBlur  = 20;
+      ctx.globalAlpha = dead ? 0.25 : 1;
+      ctx.drawImage(spriteImg, drawX, drawY, spriteW, spriteH);
+      ctx.restore();
+      ctx.globalAlpha = dead ? 0.25 : 1;
+    }
 
     ctx.drawImage(spriteImg, drawX, drawY, spriteW, spriteH);
 
@@ -750,6 +786,7 @@ interface RenderOpts {
   baseTile?: string;
   tiles?: Record<string, { attribute: string }>;
   units?: Array<{
+    unitId?: string;
     metaId: string;
     playerId: string;
     position: { row: number; col: number };
@@ -757,6 +794,8 @@ interface RenderOpts {
     teamIndex?: number;
     currentHealth?: number;
   }>;
+  /** unitId of the currently selected unit — draws a team-colored outline */
+  selectedUnitId?: string | null;
   playerIds?: string[];
   highlightHalf?: number; // teamIndex whose half to highlight (placement phase)
   placedUnits?: PlacedUnit[];
@@ -969,7 +1008,11 @@ function renderIso(canvas: HTMLCanvasElement, opts: RenderOpts): void {
       const dir = enemyPos
         ? directionToward(unit.position, enemyPos)
         : (pIdx === 0 ? "front-right" : "front-left");
-      drawUnit(ctx, sx, sy, p.HW, p.HH, p.DEPTH, color, abbr, !unit.alive, unit.metaId, dir, UNIT_NAME_KO[unit.metaId] ?? unit.metaId, badgeList, unit.currentHealth);
+      // Selection outline — team color ring+glow when this unit is selected
+      const selectionColor = (opts.selectedUnitId && unit.unitId === opts.selectedUnitId)
+        ? color
+        : undefined;
+      drawUnit(ctx, sx, sy, p.HW, p.HH, p.DEPTH, color, abbr, !unit.alive, unit.metaId, dir, UNIT_NAME_KO[unit.metaId] ?? unit.metaId, badgeList, unit.currentHealth, selectionColor);
     }
   }
 
@@ -1757,6 +1800,7 @@ async function fetchAndShowUnitOptions(
   if (activeCanvas) {
     const playerIds = Object.keys(state.players);
     const unitsArr = Object.values(state.units).map((u) => ({
+      unitId: u.unitId as string,
       metaId: u.metaId as string,
       playerId: u.playerId as string,
       position: u.position,
@@ -1774,6 +1818,7 @@ async function fetchAndShowUnitOptions(
       attackRangeTiles: attackRangeHighlights,
       attackTargetTiles: attackTargetHighlights,
       selectedPos: selectedGameUnitPos,
+      selectedUnitId,
       tileMetas,
     });
   }
@@ -2041,6 +2086,7 @@ function renderGame(state: GameStateSnapshot): void {
   const gridSize = state.map.gridSize ?? 11;
   const playerIds = Object.keys(state.players);
   const unitsArr = Object.values(state.units).map((u) => ({
+    unitId: u.unitId as string,
     metaId: u.metaId as string,
     playerId: u.playerId as string,
     position: u.position,
@@ -2107,6 +2153,7 @@ function renderGame(state: GameStateSnapshot): void {
     attackRangeTiles: attackRangeHighlights,
     attackTargetTiles: attackTargetHighlights,
     selectedPos: selectedGameUnitPos,
+    selectedUnitId,
     availW,
     availH,
     tileMetas,
