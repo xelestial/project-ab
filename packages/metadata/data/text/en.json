@@ -21,6 +21,8 @@
 
   "skill.shield_defend.name": "Shield Defend",
   "skill.shield_defend.desc": "Passively blocks penetrating and beam attack propagation. Absorbs tile effects for use in attacks.",
+  "skill.t2_pull.name": "Iron Pull",
+  "skill.t2_pull.desc": "Pull an enemy within range 1-3 to an adjacent tile. No damage. One-shot.",
   "skill.fighter_rush.name": "Rush",
   "skill.fighter_rush.desc": "Charge up to 3 tiles in a straight line, striking and knocking back the target. One use.",
   "skill.ranger_fire_arrow.name": "Fire Arrow",
