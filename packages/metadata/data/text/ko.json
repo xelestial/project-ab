@@ -21,6 +21,8 @@
 
   "skill.shield_defend.name": "방패 방어",
   "skill.shield_defend.desc": "관통 및 광선 공격의 전파를 차단하고 타일 효과를 흡수해 공격 시 활용한다. 패시브.",
+  "skill.t2_pull.name": "철갑 끌어당기기",
+  "skill.t2_pull.desc": "사거리 1~3의 적 하나를 인접 타일로 끌어당긴다. 데미지 없음. 1회 사용.",
   "skill.fighter_rush.name": "돌진",
   "skill.fighter_rush.desc": "직선으로 3칸까지 돌진 후 목표 타격 및 밀어냄. 1회 사용.",
   "skill.ranger_fire_arrow.name": "불화살",

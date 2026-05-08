@@ -19,6 +19,17 @@ interface BadgeSpec {
   fontSize: number;
 }
 
+interface SkillInfo {
+  skillId: string;
+  nameKey: string;
+  descKey: string;
+  type: "active" | "passive" | "reactive";
+  oneShot: boolean;
+  weaponId?: string;
+  canUse: boolean;
+  skillTargets: { row: number; col: number }[];
+}
+
 interface Seat {
   index: number;
   label: string;
@@ -116,6 +127,15 @@ const UNIT_NAME_KO: Record<string, string> = {
   r1: "레인저1", r2: "레인저2", r3: "레인저3", r4: "레인저4",
   b1: "브루트1", b2: "브루트2", b3: "브루트3", b4: "브루트4",
   m1: "메이지", k1: "나이트", s1: "서포트",
+};
+
+const SKILL_NAME_KO: Record<string, string> = {
+  skill_shield_defend: "방패 방어",
+  skill_t2_pull: "철갑 끌어당기기",
+};
+const SKILL_DESC_KO: Record<string, string> = {
+  skill_shield_defend: "패시브. 관통·광선 차단, 타일 효과 흡수.",
+  skill_t2_pull: "사거리 1~3 적을 인접 칸으로 당김. 1회.",
 };
 
 const UNIT_COLOR: Record<string, string> = {
@@ -646,12 +666,13 @@ function drawUnit(
   // Feet anchored at front vertex of tile top face (sx, sy + HH*2)
   const feetY = sy + HH * 2;
 
-  // ── Selection ring at feet (drawn before sprite) ─────────────────────────
+  // ── Selection ring at feet (drawn before sprite so sprite sits on top) ───
   if (selectionColor && !dead) {
     ctx.save();
     const ringRX = r * 1.25;
     const ringRY = ringRX * 0.32;
     const ringY  = feetY - HH * 0.3;
+    // Outer glow
     ctx.shadowColor = selectionColor;
     ctx.shadowBlur  = 14;
     ctx.beginPath();
@@ -660,6 +681,7 @@ function drawUnit(
     ctx.lineWidth   = 2.5;
     ctx.globalAlpha = 0.9;
     ctx.stroke();
+    // Inner fill pulse
     ctx.shadowBlur  = 6;
     ctx.beginPath();
     ctx.ellipse(cx, ringY, ringRX * 0.6, ringRY * 0.6, 0, 0, Math.PI * 2);
@@ -687,7 +709,6 @@ function drawUnit(
       ctx.save();
       ctx.shadowColor = selectionColor;
       ctx.shadowBlur  = 20;
-      ctx.globalAlpha = dead ? 0.25 : 1;
       ctx.drawImage(spriteImg, drawX, drawY, spriteW, spriteH);
       ctx.restore();
       ctx.globalAlpha = dead ? 0.25 : 1;
@@ -779,6 +800,7 @@ interface UnitInfoData {
     attackType: string;
     attribute: string;
   };
+  skills?: SkillInfo[];
 }
 
 interface RenderOpts {
@@ -803,6 +825,7 @@ interface RenderOpts {
   moveTiles?: Array<{ row: number; col: number }>;       // blue - can move here
   attackRangeTiles?: Array<{ row: number; col: number }>; // dim red - attack range (no enemy)
   attackTargetTiles?: Array<{ row: number; col: number }>; // bright red - enemy in range
+  skillTargetTiles?: Array<{ row: number; col: number }>; // purple — skill range
   selectedPos?: { row: number; col: number } | null;     // yellow glow - selected unit
   availW?: number | undefined;   // board-wrap 가용 너비 (동적 타일 크기 계산용)
   availH?: number | undefined;   // board-wrap 가용 높이
@@ -975,6 +998,20 @@ function renderIso(canvas: HTMLCanvasElement, opts: RenderOpts): void {
       ctx.fillStyle = "rgba(255, 50, 50, 0.55)";
       ctx.fill();
       ctx.strokeStyle = "rgba(255, 50, 50, 1.0)";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+    // Skill target (enemy in skill range — purple)
+    if (opts.skillTargetTiles?.some(t => t.row === row && t.col === col)) {
+      ctx.beginPath();
+      ctx.moveTo(sx, sy);
+      ctx.lineTo(sx + p.HW, sy + p.HH);
+      ctx.lineTo(sx, sy + p.HH * 2);
+      ctx.lineTo(sx - p.HW, sy + p.HH);
+      ctx.closePath();
+      ctx.fillStyle = "rgba(160, 80, 255, 0.55)";
+      ctx.fill();
+      ctx.strokeStyle = "rgba(180, 100, 255, 1.0)";
       ctx.lineWidth = 2;
       ctx.stroke();
     }
@@ -1745,6 +1782,9 @@ let moveHighlights: { row: number; col: number }[] = [];
 let attackRangeHighlights: { row: number; col: number }[] = [];
 let attackTargetHighlights: { row: number; col: number }[] = [];
 let selectedGameUnitPos: { row: number; col: number } | null = null;
+let skillTargetingSkillId: string | null = null;
+let skillTargetHighlights: { row: number; col: number }[] = [];
+let lastSkillOptions: SkillInfo[] = [];
 
 function clearUnitSelection(): void {
   selectedUnitId = null;
@@ -1753,6 +1793,8 @@ function clearUnitSelection(): void {
   moveHighlights = [];
   attackRangeHighlights = [];
   attackTargetHighlights = [];
+  skillTargetingSkillId = null;
+  skillTargetHighlights = [];
 }
 
 async function fetchAndShowUnitOptions(
@@ -1782,6 +1824,7 @@ async function fetchAndShowUnitOptions(
         enemyPositions: Array<{ row: number; col: number }>;
         canMove: boolean;
         canAttack: boolean;
+        skills?: SkillInfo[];
         unitInfo: UnitInfoData;
       };
       moveHighlights = data.canMove ? data.reachableTiles : [];
@@ -1792,6 +1835,7 @@ async function fetchAndShowUnitOptions(
         : [];
       attackTargetHighlights = data.canAttack ? data.enemyPositions : [];
       renderUnitInfoPanel(data.unitInfo);
+      lastSkillOptions = data.skills ?? [];
     }
   } catch { /* ignore */ }
 
@@ -1817,6 +1861,7 @@ async function fetchAndShowUnitOptions(
       moveTiles: moveHighlights,
       attackRangeTiles: attackRangeHighlights,
       attackTargetTiles: attackTargetHighlights,
+      skillTargetTiles: skillTargetHighlights,
       selectedPos: selectedGameUnitPos,
       selectedUnitId,
       tileMetas,
@@ -1886,13 +1931,75 @@ function renderUnitInfoPanel(info: UnitInfoData | null): void {
     </div>
     <div class="unit-info-effects">${effectsHtml}</div>
     <div class="unit-info-actions">${actionsHtml}</div>
+    ${(info.skills && info.skills.length > 0) ? `
+<div class="unit-info-skills">
+  ${info.skills.map(s => {
+    if (s.type === 'passive') {
+      return `<div class="skill-row skill-passive"><span class="skill-tag-passive">패시브</span><span class="skill-name">${SKILL_NAME_KO[s.skillId] ?? s.skillId}</span><span class="skill-desc">${SKILL_DESC_KO[s.skillId] ?? ''}</span></div>`;
+    }
+    const canUse = s.canUse;
+    return `<div class="skill-row skill-active${canUse ? '' : ' skill-used'}" data-skill-id="${s.skillId}">
+      <button class="skill-btn${canUse ? '' : ' skill-btn-disabled'}" ${canUse ? '' : 'disabled'}>✨ ${SKILL_NAME_KO[s.skillId] ?? s.skillId}</button>
+      <span class="skill-desc">${SKILL_DESC_KO[s.skillId] ?? ''}</span>
+    </div>`;
+  }).join('')}
+</div>` : ''}
   `;
   panel.classList.add("visible");
+
+  // Skill button click → enter skill targeting mode
+  panel.querySelectorAll<HTMLButtonElement>(".skill-btn:not(.skill-btn-disabled)").forEach(btn => {
+    const row = btn.closest(".skill-row") as HTMLElement | null;
+    const skillId = row?.dataset["skillId"];
+    if (!skillId) return;
+    btn.addEventListener("click", () => {
+      const skill = lastSkillOptions.find(s => s.skillId === skillId);
+      if (!skill || !skill.canUse) return;
+      skillTargetingSkillId = skillId;
+      skillTargetHighlights = skill.skillTargets;
+      // Re-render board with skill highlights
+      const activeCanvas = document.getElementById("board-canvas") as HTMLCanvasElement;
+      if (activeCanvas && lastGameState) {
+        const playerIds = Object.keys(lastGameState.players);
+        const unitsArr = Object.values(lastGameState.units).map((u) => ({
+          unitId: u.unitId as string,
+          metaId: u.metaId as string,
+          playerId: u.playerId as string,
+          position: u.position,
+          alive: u.alive,
+          teamIndex: (lastGameState!.players[u.playerId as string]?.teamIndex ?? 0) as number,
+          currentHealth: u.currentHealth as number,
+        }));
+        const boardWrap = document.querySelector(".board-wrap") as HTMLElement | null;
+        renderIso(activeCanvas, {
+          gridSize: lastGameState.map.gridSize ?? 11,
+          baseTile: lastGameState.map.baseTile ?? "plain",
+          tiles: lastGameState.map.tiles as unknown as Record<string, { attribute: string }>,
+          units: unitsArr,
+          playerIds,
+          moveTiles: moveHighlights,
+          attackRangeTiles: attackRangeHighlights,
+          attackTargetTiles: attackTargetHighlights,
+          skillTargetTiles: skillTargetHighlights,
+          selectedPos: selectedGameUnitPos,
+          selectedUnitId,
+          availW: boardWrap?.clientWidth,
+          availH: boardWrap?.clientHeight,
+          tileMetas,
+        });
+      }
+      // Visual feedback in the button
+      btn.textContent = "🎯 타겟 선택...";
+      btn.style.background = "rgba(160,80,255,0.3)";
+      btn.style.borderColor = "rgba(180,100,255,0.8)";
+    });
+  });
 }
 
 async function submitAction(action: {
-  type: "move" | "attack" | "pass";
+  type: "move" | "attack" | "pass" | "skill";
   unitId?: string;
+  skillId?: string;
   targetPosition?: { row: number; col: number };
 }): Promise<void> {
   if (!currentGameId) return;
@@ -2152,6 +2259,7 @@ function renderGame(state: GameStateSnapshot): void {
     moveTiles: moveHighlights,
     attackRangeTiles: attackRangeHighlights,
     attackTargetTiles: attackTargetHighlights,
+    skillTargetTiles: skillTargetHighlights,
     selectedPos: selectedGameUnitPos,
     selectedUnitId,
     availW,
@@ -2218,7 +2326,7 @@ function setupBoardClick(
 
   const customCursor = document.getElementById("custom-cursor");
 
-  function setCustomCursor(x: number, y: number, mode: "move" | "attack" | "destroy" | null): void {
+  function setCustomCursor(x: number, y: number, mode: "move" | "attack" | "destroy" | "no-attack" | null): void {
     if (!customCursor) return;
     if (mode === null) {
       customCursor.className = "";
@@ -2232,6 +2340,9 @@ function setupBoardClick(
     } else if (mode === "attack") {
       customCursor.textContent = "⚔️";
       customCursor.className = "cc-attack";
+    } else if (mode === "no-attack") {
+      customCursor.textContent = "🚫";
+      customCursor.className = "cc-no-attack";
     } else {
       customCursor.innerHTML = '<span class="cc-ball"></span>';
       customCursor.className = "cc-destroy";
@@ -2259,14 +2370,30 @@ function setupBoardClick(
 
     const isAttackable = attackTargetHighlights.some(t => t.row === row && t.col === col);
     const isMoveable = moveHighlights.some(t => t.row === row && t.col === col);
+    const isSkillTarget = skillTargetingSkillId !== null && skillTargetHighlights.some(t => t.row === row && t.col === col);
 
-    if (isAttackable && isMyTurn) {
+    // Enemy unit hovered but not attackable (out of range or attacked already)
+    const isEnemyNotAttackable = hoveredUnit !== undefined
+      && hoveredUnit.playerId !== humanPlayerId
+      && selectedUnitId !== null
+      && !isAttackable
+      && isMyTurn;
+
+    if (isSkillTarget && isMyTurn) {
+      if (hoveredUnit) showHoverTooltip(e.clientX, e.clientY, hoveredUnit, false, false);
+      setCustomCursor(e.clientX, e.clientY, "attack"); // reuse attack cursor for skill targets
+      newCanvas.style.cursor = "none";
+    } else if (isAttackable && isMyTurn) {
       showHoverTooltip(e.clientX, e.clientY, hoveredUnit!, true, false);
       setCustomCursor(e.clientX, e.clientY, "attack");
       newCanvas.style.cursor = "none";
     } else if (isMoveable && isMyTurn) {
       hideHoverTooltip();
       setCustomCursor(e.clientX, e.clientY, "move");
+      newCanvas.style.cursor = "none";
+    } else if (isEnemyNotAttackable) {
+      showHoverTooltip(e.clientX, e.clientY, hoveredUnit!, false, false);
+      setCustomCursor(e.clientX, e.clientY, "no-attack");
       newCanvas.style.cursor = "none";
     } else {
       if (hoveredUnit) showHoverTooltip(e.clientX, e.clientY, hoveredUnit, false, false);
@@ -2309,6 +2436,15 @@ function setupBoardClick(
     }
 
     if (!isMyTurn) return;
+
+    // Check if clicking a skill target tile
+    if (skillTargetingSkillId !== null && skillTargetHighlights.some(t => t.row === row && t.col === col)) {
+      if (selectedUnitId !== null) {
+        void submitAction({ type: "skill", unitId: selectedUnitId, skillId: skillTargetingSkillId, targetPosition: { row, col } });
+        clearUnitSelection();
+        return;
+      }
+    }
 
     // Check if clicking a highlighted attack target
     if (attackTargetHighlights.some(t => t.row === row && t.col === col)) {

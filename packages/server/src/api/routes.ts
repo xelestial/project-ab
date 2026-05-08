@@ -751,12 +751,41 @@ export async function registerRoutes(
         const unitMeta = registry.getUnit(unit.metaId);
         const weapon = registry.getWeapon(unitMeta.primaryWeaponId);
 
+        const canSkill = !unit.actionsUsed.skillUsed && !unit.actionsUsed.attacked;
+
+        const skills = unitMeta.skillIds.map((skillId) => {
+          const skill = registry.getSkill(skillId as import("@ab/metadata").MetaId);
+          let skillTargets: { row: number; col: number }[] = [];
+          if (skill.type === "active" && skill.weaponId !== undefined && canSkill) {
+            const allSkillTiles = attackValidator.getAttackableTargets(unit, session.state, {
+              overrideWeaponId: skill.weaponId as string,
+            });
+            skillTargets = allSkillTiles.filter((pos) =>
+              Object.values(session.state.units).some(
+                (u) => u.alive && u.playerId !== unit.playerId && u.position.row === pos.row && u.position.col === pos.col,
+              ),
+            );
+          }
+          return {
+            skillId: skill.id,
+            nameKey: skill.nameKey,
+            descKey: skill.descKey,
+            type: skill.type,
+            oneShot: skill.oneShot,
+            weaponId: skill.weaponId as string | undefined,
+            canUse: canSkill && skill.type === "active",
+            skillTargets,
+          };
+        });
+
         return reply.code(200).send({
           reachableTiles,
           attackableTiles,
           enemyPositions,
           canMove: !unit.actionsUsed.moved,
           canAttack: !unit.actionsUsed.attacked,
+          canSkill,
+          skills,
           unitInfo: {
             unitId: unit.unitId,
             metaId: unit.metaId,
@@ -778,6 +807,7 @@ export async function registerRoutes(
               attackType: weapon.attackType,
               attribute: weapon.attribute,
             },
+            skills,
           },
         });
       } catch {
