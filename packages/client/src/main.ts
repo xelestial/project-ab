@@ -96,9 +96,9 @@ let roomsRefreshInterval: ReturnType<typeof setInterval> | null = null;
 // ─── Unit metadata ─────────────────────────────────────────────────────────────
 
 const UNIT_ABBR: Record<string, string> = {
-  t1: "TK", t2: "TK", t3: "TK", f1: "FT", f2: "FT", f3: "FT", f4: "FT",
-  r1: "RG", r2: "RG", r3: "RG", r4: "RG", b1: "BR", b2: "BR", b3: "BR", b4: "BR",
-  m1: "MG", k1: "KN", s1: "SP",
+  t1: "T", t2: "T", t3: "T", f1: "F", f2: "F", f3: "F", f4: "F",
+  r1: "R", r2: "R", r3: "R", r4: "R", b1: "B", b2: "B", b3: "B", b4: "B",
+  m1: "M", k1: "K", s1: "S",
 };
 
 /** Base HP per unit type (matches metadata/data/units.json baseHealth) */
@@ -552,47 +552,32 @@ function drawSingleBadge(
   cx: number, topY: number,
   label: string, color: string, dead: boolean, fontSize: number,
 ): void {
-  const padX = fontSize * 0.5;
-  const padY = fontSize * 0.3;
-  ctx.font = `bold ${fontSize}px "Segoe UI", sans-serif`;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "bottom";
-  const tw = ctx.measureText(label).width;
-  const bw = tw + padX * 2;
-  const bh = fontSize + padY * 2;
-  const bx = cx - bw / 2;
-  const by = topY;
-  const rad = bh / 2;
+  // 원형 배지: 지름 = fontSize * 1.6, 머릿글자 한 글자
+  const r = fontSize * 0.8;
+  const cy = topY + r;
+  ctx.globalAlpha = dead ? 0.25 : 0.9;
   ctx.beginPath();
-  ctx.moveTo(bx + rad, by);
-  ctx.lineTo(bx + bw - rad, by);
-  ctx.arcTo(bx + bw, by, bx + bw, by + bh, rad);
-  ctx.lineTo(bx + bw, by + bh - rad);
-  ctx.arcTo(bx + bw, by + bh, bx + bw - rad, by + bh, rad);
-  ctx.lineTo(bx + rad, by + bh);
-  ctx.arcTo(bx, by + bh, bx, by + bh - rad, rad);
-  ctx.lineTo(bx, by + rad);
-  ctx.arcTo(bx, by, bx + rad, by, rad);
-  ctx.closePath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
   ctx.fillStyle = color;
-  ctx.globalAlpha = dead ? 0.25 : 0.88;
   ctx.fill();
+  ctx.strokeStyle = "rgba(255,255,255,0.55)";
+  ctx.lineWidth = 1;
+  ctx.stroke();
   ctx.globalAlpha = dead ? 0.25 : 1;
   ctx.fillStyle = "#fff";
-  ctx.fillText(label, cx, by + bh - padY * 0.5);
+  ctx.font = `bold ${fontSize}px "Segoe UI", sans-serif`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(label, cx, cy);
   ctx.globalAlpha = 1;
 }
 
 function drawBadges(ctx: CanvasRenderingContext2D, badges: BadgeSpec[]): void {
   if (badges.length === 0) return;
 
-  // Compute pixel dims for each badge
-  const pad = (b: BadgeSpec) => ({ padX: b.fontSize * 0.5, padY: b.fontSize * 0.3 });
-  const bwOf = (b: BadgeSpec) => {
-    ctx.font = `bold ${b.fontSize}px "Segoe UI", sans-serif`;
-    return ctx.measureText(b.label).width + b.fontSize;
-  };
-  const bhOf = (b: BadgeSpec) => b.fontSize + b.fontSize * 0.6;
+  // 원형 배지: 지름 = fontSize * 1.6
+  const bwOf = (b: BadgeSpec) => b.fontSize * 1.6;
+  const bhOf = (b: BadgeSpec) => b.fontSize * 1.6;
 
   // Build rects with adjusted top y — resolve overlaps by pushing up
   type Rect = { b: BadgeSpec; x0: number; y0: number; x1: number; y1: number };
@@ -676,9 +661,9 @@ function drawUnit(
     const fontSize = Math.max(9, Math.round(HW * 0.45));
     const naturalTop = drawY - 4 - (fontSize + fontSize * 0.3 * 2); // approx badge top
     if (badgeCollector) {
-      badgeCollector.push({ cx, naturalTop, label: `${abbr} ${unitName}`, color, dead, fontSize });
+      badgeCollector.push({ cx, naturalTop, label: abbr, color, dead, fontSize });
     } else {
-      drawSingleBadge(ctx, cx, naturalTop, `${abbr} ${unitName}`, color, dead, fontSize);
+      drawSingleBadge(ctx, cx, naturalTop, abbr, color, dead, fontSize);
     }
   } else {
     // Fallback: colored circle + abbreviation
