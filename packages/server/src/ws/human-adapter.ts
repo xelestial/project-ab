@@ -178,4 +178,11 @@ export class HumanAdapter implements IPlayerAdapter {
       this.socket.send(encodeMessage(msg));
     }
   }
+
+  /** Send a pre-encoded JSON string directly (used for broadcast efficiency). */
+  sendRaw(payload: string): void {
+    if (this.socket.readyState === 1) {
+      this.socket.send(payload);
+    }
+  }
 }

@@ -244,7 +244,6 @@ async function placeUnits(page, name) {
     const tile = candidateTiles[tileIdx++];
     await clickGridCell(page, tile.row, tile.col);
     await page.waitForTimeout(100);
-
     const now = parseInt(
       await page.$eval("#placement-counter", (el) => el.textContent ?? "0"), 10,
     );

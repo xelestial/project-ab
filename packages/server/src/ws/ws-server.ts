@@ -236,6 +236,31 @@ export async function registerWsRoutes(
             };
           }
         }
+
+        if (msg.type === "placement_update") {
+          const session = sessionManager.getSession(msg.gameId);
+          if (session === undefined || session.status !== "waiting") return;
+
+          // Update this player's selection
+          session.selectionMap.set(msg.playerId, msg.metaIds);
+
+          // Build snapshot: playerId → metaIds for all players in this session
+          const selections: Record<string, string[]> = {};
+          for (const [pid, metaIds] of session.selectionMap) {
+            selections[pid] = metaIds;
+          }
+
+          // Broadcast to every connected adapter (including the sender)
+          const broadcastMsg = encodeMessage({
+            type: "placement_selections",
+            gameId: msg.gameId,
+            selections,
+          });
+          for (const adp of session.adapters.values()) {
+            const adpWithRaw = adp as { sendRaw?: (payload: string) => void };
+            try { adpWithRaw.sendRaw?.(broadcastMsg); } catch { /* socket may be closed */ }
+          }
+        }
       });
 
       socket.on("close", () => {

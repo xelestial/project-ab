@@ -456,6 +456,23 @@ export async function registerRoutes(
 
   // ── Pre-game placement (protected) ───────────────────────────────────────
 
+  /**
+   * Per-game placement mutex: ensures concurrent /place requests for the same
+   * game are processed sequentially, preventing same-team duplicate metaId races.
+   */
+  const placementLocks = new Map<string, Promise<void>>();
+
+  function withPlacementLock<T>(gameId: string, fn: () => Promise<T>): Promise<T> {
+    const current = placementLocks.get(gameId) ?? Promise.resolve();
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    placementLocks.set(gameId, current.then(() => gate));
+    return current.then(async () => {
+      try { return await fn(); }
+      finally { release(); }
+    });
+  }
+
   const PlacementBodySchema = z.object({
     playerId: z.string().min(1),
     units: z.array(
@@ -474,7 +491,9 @@ export async function registerRoutes(
     "/api/v1/rooms/:gameId/place",
     { preHandler: requireAuth },
     async (req, reply) => {
-      const session = sessionManager.getSession(req.params["gameId"]);
+      // Fast pre-checks outside the lock (session existence, parse)
+      const gameId = req.params["gameId"];
+      const session = sessionManager.getSession(gameId);
       if (session === undefined) {
         return reply.code(404).send({ error: "Game not found" });
       }
@@ -487,87 +506,107 @@ export async function registerRoutes(
         return reply.code(400).send({ error: "Invalid request", details: body.error.flatten() });
       }
 
-      const { playerId, units } = body.data;
+      // Serialize all placement submissions per game to prevent same-team race conditions
+      return withPlacementLock(gameId, async () => {
+        const { playerId, units } = body.data;
 
-      const { gridSize } = session.state.map;
-      const mapMeta = registry.getMap(session.state.map.mapId);
+        const { gridSize } = session.state.map;
+        const mapMeta = registry.getMap(session.state.map.mapId);
 
-      // Auto-register human player if not yet in game (e.g. WS join timed out)
-      if (session.state.players[playerId] === undefined) {
-        const teamSize = mapMeta.teamSize ?? 1;
-        const slotIndex = Object.keys(session.state.players).length;
-        const teamIndex = Math.floor(slotIndex / teamSize);
-        session.state = {
-          ...session.state,
-          players: {
-            ...session.state.players,
-            [playerId]: {
-              playerId: playerId as PlayerId,
-              teamIndex,
-              priority: 1,
-              unitIds: [] as UnitId[],
-              connected: true,
-              surrendered: false,
+        // Auto-register human player if not yet in game (e.g. WS join timed out)
+        if (session.state.players[playerId] === undefined) {
+          const teamSize = mapMeta.teamSize ?? 1;
+          const slotIndex = Object.keys(session.state.players).length;
+          const teamIndex = Math.floor(slotIndex / teamSize);
+          session.state = {
+            ...session.state,
+            players: {
+              ...session.state.players,
+              [playerId]: {
+                playerId: playerId as PlayerId,
+                teamIndex,
+                priority: 1,
+                unitIds: [] as UnitId[],
+                connected: true,
+                surrendered: false,
+              },
             },
-          },
-        };
-      }
-
-      const playerState = session.state.players[playerId]!;
-      const maxUnits = mapMeta.maxUnitsPerPlayer ?? 3;
-
-      if (units.length !== maxUnits) {
-        return reply.code(400).send({ error: `Must place exactly ${maxUnits} units` });
-      }
-
-      // Validate positions are on player's half
-      const half = Math.floor(gridSize / 2);
-      const rowStart = playerState.teamIndex === 0 ? 0 : half;
-      const rowEnd = playerState.teamIndex === 0 ? half - 1 : gridSize - 1;
-
-      for (const u of units) {
-        if (u.position.row < rowStart || u.position.row > rowEnd || u.position.col < 0 || u.position.col >= gridSize) {
-          return reply.code(400).send({
-            error: `Position (${u.position.row},${u.position.col}) is not on player's half`,
-          });
+          };
         }
-      }
 
-      // Validate no duplicate positions in this placement
-      const posSeen = new Set<string>();
-      for (const u of units) {
-        const k = `${u.position.row},${u.position.col}`;
-        if (posSeen.has(k)) {
-          return reply.code(400).send({ error: "Duplicate position in placement" });
+        const playerState = session.state.players[playerId]!;
+        const maxUnits = mapMeta.maxUnitsPerPlayer ?? 3;
+
+        if (units.length !== maxUnits) {
+          return reply.code(400).send({ error: `Must place exactly ${maxUnits} units` });
         }
-        posSeen.add(k);
-      }
 
-      // Validate no duplicate metaIds (same player can't pick same unit twice)
-      const metaSeen = new Set<string>();
-      for (const u of units) {
-        if (metaSeen.has(u.metaId)) {
-          return reply.code(400).send({ error: "Duplicate metaId in placement — pick different unit types" });
+        // Validate positions are on player's half
+        const half = Math.floor(gridSize / 2);
+        const rowStart = playerState.teamIndex === 0 ? 0 : half;
+        const rowEnd = playerState.teamIndex === 0 ? half - 1 : gridSize - 1;
+
+        for (const u of units) {
+          if (u.position.row < rowStart || u.position.row > rowEnd || u.position.col < 0 || u.position.col >= gridSize) {
+            return reply.code(400).send({
+              error: `Position (${u.position.row},${u.position.col}) is not on player's half`,
+            });
+          }
         }
-        metaSeen.add(u.metaId);
-      }
 
-      // Persist placement to memory + store (Redis)
-      await sessionManager.savePlacement(session.gameId, playerId, units);
+        // Validate no duplicate positions in this placement
+        const posSeen = new Set<string>();
+        for (const u of units) {
+          const k = `${u.position.row},${u.position.col}`;
+          if (posSeen.has(k)) {
+            return reply.code(400).send({ error: "Duplicate position in placement" });
+          }
+          posSeen.add(k);
+        }
 
-      // Register a PassThroughAdapter if this human doesn't have a WS adapter yet
-      if (!session.adapters.has(playerId)) {
-        const passAdapter = new PassThroughAdapter(playerId);
-        sessionManager.addAdapter(session.gameId, passAdapter);
-      }
+        // Validate no duplicate metaIds within this player's own placement
+        const metaSeen = new Set<string>();
+        for (const u of units) {
+          if (metaSeen.has(u.metaId)) {
+            return reply.code(400).send({ error: "Duplicate metaId in placement — pick different unit types" });
+          }
+          metaSeen.add(u.metaId);
+        }
 
-      // Try to start game
-      tryStartGame(session, factory, registry, statsStore, fastify.log, replayStore);
+        // Validate no metaId overlap with teammates (inside lock → placements are consistent)
+        const myTeam = playerState.teamIndex;
+        for (const [pid, entries] of session.placements) {
+          const pState = session.state.players[pid];
+          if (pState === undefined || pState.teamIndex !== myTeam) continue;
+          const takenByTeammate = entries.map((e) => e.metaId);
+          for (const u of units) {
+            if (takenByTeammate.includes(u.metaId)) {
+              return reply.code(409).send({
+                error: `유닛 "${u.metaId}"은(는) 같은 팀 플레이어가 이미 선택했습니다. 다른 유닛을 선택해주세요.`,
+                conflictMetaId: u.metaId,
+                takenBy: pid,
+              });
+            }
+          }
+        }
 
-      return reply.code(200).send({
-        accepted: true,
-        waitingFor: session.expectedPlayerCount - session.placements.size,
-        started: session.status === "running",
+        // Persist placement to memory + store (Redis)
+        await sessionManager.savePlacement(session.gameId, playerId, units);
+
+        // Register a PassThroughAdapter if this human doesn't have a WS adapter yet
+        if (!session.adapters.has(playerId)) {
+          const passAdapter = new PassThroughAdapter(playerId);
+          sessionManager.addAdapter(session.gameId, passAdapter);
+        }
+
+        // Try to start game
+        tryStartGame(session, factory, registry, statsStore, fastify.log, replayStore);
+
+        return reply.code(200).send({
+          accepted: true,
+          waitingFor: session.expectedPlayerCount - session.placements.size,
+          started: session.status === "running",
+        });
       });
     },
   );
