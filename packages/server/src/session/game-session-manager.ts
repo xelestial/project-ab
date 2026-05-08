@@ -32,6 +32,11 @@ export interface GameSession {
   expectedPlayerCount: number;
   /** Pre-game placement submissions: playerId → placed unit list (mirrored from store) */
   placements: Map<string, PlacementEntry[]>;
+  /**
+   * Transient placement-phase selection: playerId → metaIds currently selected/placed.
+   * Broadcast to teammates in real-time; not persisted to the store.
+   */
+  selectionMap: Map<string, string[]>;
 }
 
 export class GameSessionManager {
@@ -60,6 +65,7 @@ export class GameSessionManager {
       mapId,
       expectedPlayerCount,
       placements: new Map(),
+      selectionMap: new Map(),
     };
     this.sessions.set(gameId, session);
 
@@ -107,6 +113,7 @@ export class GameSessionManager {
       mapId: record.mapId,
       expectedPlayerCount: record.expectedPlayerCount,
       placements,
+      selectionMap: new Map(),
     };
     this.sessions.set(gameId, session);
     return session;

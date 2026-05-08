@@ -85,6 +85,8 @@ let availableUnits: UnitMeta[] = [];
 // Placement state
 let selectedMetaId: string | null = null;
 let placedUnits: PlacedUnit[] = [];
+/** playerId → metaIds they currently have placed/selected (received via WS) */
+let teammateSelections: Record<string, string[]> = {};
 let lastGameState: GameStateSnapshot | null = null;
 
 // Tile metadata cache — loaded once from server, keyed by tileType
@@ -1326,6 +1328,11 @@ async function connectHumanPlayer(gameId: string): Promise<void> {
     onUnitOrderRequest: (aliveUnitIds, timeoutMs) => {
       showUnitOrderDraft(aliveUnitIds, timeoutMs);
     },
+    onPlacementSelections: (selections) => {
+      teammateSelections = selections;
+      const maxUnits = currentMode?.maxUnitsPerPlayer ?? 3;
+      renderUnitCards(maxUnits);
+    },
   });
 
   // Open placement screen immediately (player was already pre-registered)
@@ -1340,6 +1347,7 @@ async function openPlacementScreen(gameId: string): Promise<void> {  // eslint-d
 
   placedUnits = [];
   selectedMetaId = null;
+  teammateSelections = {};
 
   // Fetch game state to get map info
   let gridSize = 11;
@@ -1399,37 +1407,86 @@ async function openPlacementScreen(gameId: string): Promise<void> {  // eslint-d
   pollGameState(gameId); // Start polling; once battle starts, switch to game screen
 }
 
+/** Compute which metaIds are locked by a same-team teammate (not us). */
+function getTeammateLockedMetaIds(): Set<string> {
+  const locked = new Set<string>();
+  for (const [pid, metaIds] of Object.entries(teammateSelections)) {
+    if (pid === humanPlayerId) continue; // skip self
+    for (const mid of metaIds) locked.add(mid);
+  }
+  return locked;
+}
+
+/** Find which teammate playerId has locked a given metaId (for tooltip). */
+function lockedByWhom(metaId: string): string | null {
+  for (const [pid, metaIds] of Object.entries(teammateSelections)) {
+    if (pid === humanPlayerId) continue;
+    if (metaIds.includes(metaId)) return pid;
+  }
+  return null;
+}
+
+/** Broadcast current selection state to server so teammates see it. */
+function broadcastPlacementUpdate(): void {
+  if (!currentGameId || !ws.connected) return;
+  const myMetaIds = [
+    ...placedUnits.map((u) => u.metaId),
+    ...(selectedMetaId ? [selectedMetaId] : []),
+  ];
+  ws.sendPlacementUpdate(currentGameId, humanPlayerId, myMetaIds);
+}
+
 function renderUnitCards(maxUnits: number): void {
   const list = document.getElementById("unit-card-list");
   if (!list) return;
   list.innerHTML = "<h3>유닛 선택</h3>";
+
+  const lockedByTeammate = getTeammateLockedMetaIds();
 
   for (const unit of availableUnits) {
     const abbr = UNIT_ABBR[unit.id] ?? unit.id.toUpperCase().slice(0, 2);
     const name = UNIT_NAME_KO[unit.id] ?? unit.id;
     const isUsed = placedUnits.some((p) => p.metaId === unit.id);
     const isSelected = selectedMetaId === unit.id;
+    const isTakenByTeammate = !isUsed && lockedByTeammate.has(unit.id);
     const color = UNIT_COLOR[unit.class] ?? "#888";
 
     const card = document.createElement("div");
-    card.className = `unit-card ${isSelected ? "selected" : ""} ${isUsed ? "used" : ""}`;
+    card.className = [
+      "unit-card",
+      isSelected ? "selected" : "",
+      isUsed ? "used" : "",
+      isTakenByTeammate ? "teammate-taken" : "",
+    ].filter(Boolean).join(" ");
     card.dataset["metaId"] = unit.id;
+
+    if (isTakenByTeammate) {
+      const takenBy = lockedByWhom(unit.id);
+      card.title = `팀원(${takenBy?.slice(0, 8) ?? "??"})이 선택 중`;
+    }
+
     const portrait = portraitPath(unit.id);
     const portraitHtml = portrait !== null
       ? `<div class="unit-portrait"><img src="${portrait}" alt="${name}" /></div>`
       : `<div class="unit-abbr" style="background:${color};border-color:${color}">${abbr}</div>`;
+
+    const takenBadge = isTakenByTeammate
+      ? `<div class="teammate-taken-badge">팀원 선택 중</div>`
+      : "";
+
     card.innerHTML = `
       ${portraitHtml}
       <div class="unit-info">
         <div class="unit-name">${name}</div>
         <div class="unit-stats">HP ${unit.baseHealth} · MOV ${unit.baseMovement} · ARM ${unit.baseArmor}</div>
+        ${takenBadge}
       </div>
     `;
     card.addEventListener("click", () => {
-      if (!isUsed) {
-        selectedMetaId = selectedMetaId === unit.id ? null : unit.id;
-        renderUnitCards(maxUnits);
-      }
+      if (isUsed || isTakenByTeammate) return; // block selection of teammate's unit
+      selectedMetaId = selectedMetaId === unit.id ? null : unit.id;
+      renderUnitCards(maxUnits);
+      broadcastPlacementUpdate();
     });
     list.appendChild(card);
   }
@@ -1520,6 +1577,7 @@ function renderPlacementCanvas(
     updatePlacementCounter(maxUnits);
     renderUnitCards(maxUnits);
     renderPlacementCanvas(gridSize, baseTile, tiles);
+    broadcastPlacementUpdate(); // notify teammates of updated selection
   };
 }
 

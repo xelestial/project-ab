@@ -115,4 +115,7 @@ export class PassThroughAdapter implements IPlayerAdapter {
       try { fn(state); } catch { /* ignore */ }
     }
   }
+
+  /** No-op for REST-only players — they don't have a WebSocket to write to. */
+  sendRaw(_payload: string): void { /* no-op */ }
 }

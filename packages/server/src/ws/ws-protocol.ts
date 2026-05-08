@@ -39,6 +39,17 @@ export const ClientMessageSchema = z.discriminatedUnion("type", [
     gameId: z.string(),
     playerId: z.string(),
   }),
+  /**
+   * Placement phase: player broadcasts their currently selected metaIds.
+   * Sent whenever the player's selection changes (pick / remove / place).
+   */
+  z.object({
+    type: z.literal("placement_update"),
+    gameId: z.string(),
+    playerId: z.string(),
+    /** metaIds the player has placed OR currently has selected */
+    metaIds: z.array(z.string()),
+  }),
 ]);
 
 export type ClientMessage = z.infer<typeof ClientMessageSchema>;
@@ -99,6 +110,16 @@ export const ServerMessageSchema = z.discriminatedUnion("type", [
     type: z.literal("error"),
     code: z.string(),
     message: z.string(),
+  }),
+  /**
+   * Placement phase: server broadcasts all players' current selection state.
+   * selections: { [playerId]: metaId[] }
+   * Sent to every connected adapter whenever any player updates their selection.
+   */
+  z.object({
+    type: z.literal("placement_selections"),
+    gameId: z.string(),
+    selections: z.record(z.string(), z.array(z.string())),
   }),
 ]);
 

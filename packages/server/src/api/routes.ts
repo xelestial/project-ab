@@ -543,13 +543,30 @@ export async function registerRoutes(
         posSeen.add(k);
       }
 
-      // Validate no duplicate metaIds (same player can't pick same unit twice)
+      // Validate no duplicate metaIds within this player's own placement
       const metaSeen = new Set<string>();
       for (const u of units) {
         if (metaSeen.has(u.metaId)) {
           return reply.code(400).send({ error: "Duplicate metaId in placement — pick different unit types" });
         }
         metaSeen.add(u.metaId);
+      }
+
+      // Validate no metaId overlap with teammates who already submitted their placement
+      const myTeam = playerState.teamIndex;
+      for (const [pid, entries] of session.placements) {
+        const pState = session.state.players[pid];
+        if (pState === undefined || pState.teamIndex !== myTeam) continue; // different team, skip
+        const takenByTeammate = entries.map((e) => e.metaId);
+        for (const u of units) {
+          if (takenByTeammate.includes(u.metaId)) {
+            return reply.code(409).send({
+              error: `유닛 "${u.metaId}"은(는) 같은 팀 플레이어가 이미 선택했습니다. 다른 유닛을 선택해주세요.`,
+              conflictMetaId: u.metaId,
+              takenBy: pid,
+            });
+          }
+        }
       }
 
       // Persist placement to memory + store (Redis)
