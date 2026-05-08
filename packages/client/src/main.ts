@@ -1369,7 +1369,10 @@ async function openPlacementScreen(gameId: string): Promise<void> {  // eslint-d
 
         // Determine human player's teamIndex (prefer already-known value)
         const pState = data.state.players[humanPlayerId];
-        if (pState !== undefined) humanTeamIndex = pState.teamIndex;
+        if (pState !== undefined) {
+          humanTeamIndex = pState.teamIndex;
+          sessionStorage.setItem("ab_team_index", String(humanTeamIndex));
+        }
       }
     } catch { /* fallback to defaults */ }
   }
@@ -1407,11 +1410,14 @@ async function openPlacementScreen(gameId: string): Promise<void> {  // eslint-d
   pollGameState(gameId); // Start polling; once battle starts, switch to game screen
 }
 
-/** Compute which metaIds are locked by a same-team teammate (not us). */
+/** Compute which metaIds are locked by a same-team teammate (not us, not opponents). */
 function getTeammateLockedMetaIds(): Set<string> {
   const locked = new Set<string>();
   for (const [pid, metaIds] of Object.entries(teammateSelections)) {
     if (pid === humanPlayerId) continue; // skip self
+    // Only count players on the same team
+    const pidTeam = lastGameState?.players[pid]?.teamIndex;
+    if (pidTeam === undefined || pidTeam !== humanTeamIndex) continue;
     for (const mid of metaIds) locked.add(mid);
   }
   return locked;
@@ -1421,6 +1427,8 @@ function getTeammateLockedMetaIds(): Set<string> {
 function lockedByWhom(metaId: string): string | null {
   for (const [pid, metaIds] of Object.entries(teammateSelections)) {
     if (pid === humanPlayerId) continue;
+    const pidTeam = lastGameState?.players[pid]?.teamIndex;
+    if (pidTeam === undefined || pidTeam !== humanTeamIndex) continue;
     if (metaIds.includes(metaId)) return pid;
   }
   return null;
