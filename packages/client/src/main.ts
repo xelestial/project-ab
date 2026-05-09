@@ -1786,6 +1786,170 @@ let skillTargetingSkillId: string | null = null;
 let skillTargetHighlights: { row: number; col: number }[] = [];
 let lastSkillOptions: SkillInfo[] = [];
 
+// ── Overlay animation system ──────────────────────────────────────────────────
+interface AttackAnim {
+  row: number; col: number;
+  kind: "particles" | "damage";
+  startMs: number;
+  duration: number;
+  damage?: number;
+}
+let hoveredTile: { row: number; col: number; kind: "move" | "attack" | "skill" } | null = null;
+let attackAnims: AttackAnim[] = [];
+let animRafId: number | null = null;
+const prevUnitHp = new Map<string, number>();
+const animGridParams = { gridSize: 11, availW: undefined as number | undefined, availH: undefined as number | undefined };
+
+function addAttackParticles(row: number, col: number): void {
+  attackAnims.push({ row, col, kind: "particles", startMs: Date.now(), duration: 550 });
+  startAnimLoop();
+}
+
+function addDamageFloat(row: number, col: number, damage: number): void {
+  attackAnims.push({ row, col, kind: "damage", startMs: Date.now(), duration: 950, damage });
+  startAnimLoop();
+}
+
+// Expose for test/debug
+(window as unknown as Record<string, unknown>).__addAttackParticles = addAttackParticles;
+(window as unknown as Record<string, unknown>).__addDamageFloat = addDamageFloat;
+(window as unknown as Record<string, unknown>).__tickAnimNow = tickAnim;
+
+function startAnimLoop(): void {
+  if (animRafId !== null) return;
+  animRafId = requestAnimationFrame(tickAnim);
+}
+
+function tickAnim(): void {
+  const boardCanvas = document.getElementById("board-canvas") as HTMLCanvasElement | null;
+  const animCanvas  = document.getElementById("anim-canvas")  as HTMLCanvasElement | null;
+  if (!boardCanvas || !animCanvas) { animRafId = null; return; }
+
+  // Sync anim canvas size and position over board canvas
+  const wrapEl = boardCanvas.parentElement;
+  const boardRect = boardCanvas.getBoundingClientRect();
+  const wrapRect  = wrapEl?.getBoundingClientRect() ?? boardRect;
+  animCanvas.style.left   = `${boardRect.left - wrapRect.left}px`;
+  animCanvas.style.top    = `${boardRect.top  - wrapRect.top}px`;
+  animCanvas.style.width  = `${boardRect.width}px`;
+  animCanvas.style.height = `${boardRect.height}px`;
+  if (animCanvas.width !== boardCanvas.width || animCanvas.height !== boardCanvas.height) {
+    animCanvas.width  = boardCanvas.width;
+    animCanvas.height = boardCanvas.height;
+  }
+
+  const ctx = animCanvas.getContext("2d")!;
+  ctx.clearRect(0, 0, animCanvas.width, animCanvas.height);
+
+  // Derive grid params: prefer stored values; fall back to canvas pixel size
+  const gs   = animGridParams.gridSize;
+  const avW  = animGridParams.availW ?? (boardCanvas.width  + 16);
+  const avH  = animGridParams.availH ?? (boardCanvas.height + 16);
+  const p    = isoParams(gs, avW, avH);
+  const now = Date.now();
+
+  // ── Hover focus ring ────────────────────────────────────────────────────────
+  if (hoveredTile) {
+    const { row, col, kind } = hoveredTile;
+    const { sx, sy } = gridToScreen(row, col, p.cx, p.cy, p.HW, p.HH);
+    const pulse = (Math.sin(now / 220) + 1) / 2; // 0..1
+    const alpha = 0.55 + 0.45 * pulse;
+    const ringColor = kind === "attack" ? `rgba(255,100,80,${alpha})`
+                    : kind === "skill"  ? `rgba(200,130,255,${alpha})`
+                    :                     `rgba(110,210,255,${alpha})`;
+    ctx.save();
+    ctx.shadowColor = ringColor;
+    ctx.shadowBlur  = p.HW * 0.7;
+    ctx.beginPath();
+    ctx.moveTo(sx,          sy);
+    ctx.lineTo(sx + p.HW,   sy + p.HH);
+    ctx.lineTo(sx,          sy + p.HH * 2);
+    ctx.lineTo(sx - p.HW,   sy + p.HH);
+    ctx.closePath();
+    ctx.strokeStyle = ringColor;
+    ctx.lineWidth   = 3;
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // ── Attack animations ───────────────────────────────────────────────────────
+  const now2 = Date.now();
+  attackAnims = attackAnims.filter(a => now2 - a.startMs < a.duration);
+  for (const anim of attackAnims) {
+    const t = (now2 - anim.startMs) / anim.duration; // 0..1
+    const { sx, sy } = gridToScreen(anim.row, anim.col, p.cx, p.cy, p.HW, p.HH);
+    const cx2 = sx, cy2 = sy + p.HH;
+
+    if (anim.kind === "particles") {
+      const easeOut = 1 - (1 - t) * (1 - t);
+      const maxLen  = p.HW * 0.9;
+      // 8 radiating spark lines
+      for (let i = 0; i < 8; i++) {
+        const angle = (i / 8) * Math.PI * 2 + Math.PI / 8;
+        const len   = maxLen * easeOut;
+        const fade  = t < 0.45 ? 1 : 1 - (t - 0.45) / 0.55;
+        ctx.save();
+        ctx.globalAlpha  = fade;
+        ctx.strokeStyle  = i % 2 === 0 ? "#ff8844" : "#ffcc44";
+        ctx.lineWidth    = 2.5;
+        ctx.lineCap      = "round";
+        ctx.beginPath();
+        ctx.moveTo(cx2 + Math.cos(angle) * p.HW * 0.18,
+                   cy2 + Math.sin(angle) * p.HH * 0.25);
+        ctx.lineTo(cx2 + Math.cos(angle) * len,
+                   cy2 + Math.sin(angle) * len * 0.6);
+        ctx.stroke();
+        ctx.restore();
+      }
+      // Centre flash
+      const flashAlpha = t < 0.25 ? 1 - t / 0.25 * 0.5 : 0;
+      if (flashAlpha > 0) {
+        ctx.save();
+        ctx.globalAlpha = flashAlpha;
+        const grad = ctx.createRadialGradient(cx2, cy2, 0, cx2, cy2, p.HW * 0.45);
+        grad.addColorStop(0, "rgba(255,255,255,1)");
+        grad.addColorStop(1, "rgba(255,140,60,0)");
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.ellipse(cx2, cy2, p.HW * 0.45, p.HH * 0.55, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+
+    if (anim.kind === "damage" && anim.damage !== undefined) {
+      const floatY  = cy2 - p.HH * 3 * t;
+      const fadeIn  = Math.min(1, t / 0.12);
+      const fadeOut = t > 0.6 ? 1 - (t - 0.6) / 0.4 : 1;
+      const alpha   = fadeIn * fadeOut;
+      const fs      = Math.max(16, Math.round(p.HW * 0.72));
+      ctx.save();
+      ctx.globalAlpha   = alpha;
+      ctx.font          = `900 ${fs}px Arial, sans-serif`;
+      ctx.textAlign     = "center";
+      ctx.textBaseline  = "middle";
+      // Outline
+      ctx.strokeStyle   = "rgba(0,0,0,0.85)";
+      ctx.lineWidth     = fs * 0.18;
+      ctx.lineJoin      = "round";
+      const txt = anim.damage === 0 ? "MISS" : `-${anim.damage}`;
+      ctx.strokeText(txt, cx2, floatY);
+      ctx.fillStyle = anim.damage === 0 ? "#aaaaaa" : "#ff3333";
+      ctx.fillText(txt,   cx2, floatY);
+      ctx.restore();
+    }
+  }
+
+  // Keep looping while there's something to draw
+  if (hoveredTile !== null || attackAnims.length > 0) {
+    animRafId = requestAnimationFrame(tickAnim);
+  } else {
+    // Clear the canvas one final time then stop
+    ctx.clearRect(0, 0, animCanvas.width, animCanvas.height);
+    animRafId = null;
+  }
+}
+
 function clearUnitSelection(): void {
   selectedUnitId = null;
   selectedUnitPos = null;
@@ -2245,6 +2409,22 @@ function renderGame(state: GameStateSnapshot): void {
   const availW = boardWrap?.clientWidth;
   const availH = boardWrap?.clientHeight;
 
+  // Update overlay animation grid params
+  animGridParams.gridSize = gridSize;
+  animGridParams.availW   = availW;
+  animGridParams.availH   = availH;
+
+  // Detect HP changes → attack particles + floating damage numbers
+  for (const u of unitsArr) {
+    const prev = prevUnitHp.get(u.unitId);
+    const curr = u.currentHealth;
+    if (prev !== undefined && curr < prev) {
+      addAttackParticles(u.position.row, u.position.col);
+      addDamageFloat(u.position.row, u.position.col, prev - curr);
+    }
+    prevUnitHp.set(u.unitId, curr);
+  }
+
   // Set up board interaction
   setupBoardClick(canvas, state, isMyTurn, gridSize, availW, availH);
 
@@ -2379,6 +2559,20 @@ function setupBoardClick(
       && !isAttackable
       && isMyTurn;
 
+    // Hover focus tile (overlay canvas)
+    let newHoverKind: "move" | "attack" | "skill" | null = null;
+    if      (isSkillTarget && isMyTurn)  newHoverKind = "skill";
+    else if (isAttackable  && isMyTurn)  newHoverKind = "attack";
+    else if (isMoveable    && isMyTurn)  newHoverKind = "move";
+    const newHover = newHoverKind ? { row, col, kind: newHoverKind } : null;
+    if (!newHover !== !hoveredTile ||
+        newHover?.row !== hoveredTile?.row ||
+        newHover?.col !== hoveredTile?.col ||
+        newHover?.kind !== hoveredTile?.kind) {
+      hoveredTile = newHover;
+      startAnimLoop();
+    }
+
     if (isSkillTarget && isMyTurn) {
       if (hoveredUnit) showHoverTooltip(e.clientX, e.clientY, hoveredUnit, false, false);
       setCustomCursor(e.clientX, e.clientY, "attack"); // reuse attack cursor for skill targets
@@ -2406,6 +2600,8 @@ function setupBoardClick(
   newCanvas.addEventListener("mouseleave", () => {
     hideHoverTooltip();
     setCustomCursor(0, 0, null);
+    hoveredTile = null;
+    // animLoop will stop naturally once hoveredTile is null and anims finish
   });
 
   newCanvas.addEventListener("click", (e) => {
