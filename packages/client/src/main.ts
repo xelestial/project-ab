@@ -547,7 +547,7 @@ function loadSprite(src: string): HTMLImageElement {
 
 /** Preload all unit sprites in the background. */
 function preloadSprites(): void {
-  const units = ["b1","b2","b3","b4","f1","f2","f3","f4","r1","r2","r3","r4","t1","t2","t3"];
+  const units = ["b1","b2","r1","r2","t1","t2"];
   const dirs = ["front-left", "front-right", "back-left", "back-right"] as const;
   for (const u of units) {
     loadSprite(`/sprites/portraits/${u}.png`);
@@ -557,14 +557,14 @@ function preloadSprites(): void {
 
 /** Returns the sprite path for a unit+direction, or null if no sprite exists. */
 function spritePath(metaId: string, direction: "front-left" | "front-right" | "back-left" | "back-right"): string | null {
-  const SPRITE_UNITS = new Set(["b1","b2","b3","b4","f1","f2","f3","f4","r1","r2","r3","r4","t1","t2","t3"]);
+  const SPRITE_UNITS = new Set(["b1","b2","r1","r2","t1","t2"]);
   if (!SPRITE_UNITS.has(metaId)) return null;
   return `/sprites/units/${metaId}-${direction}.png`;
 }
 
 /** Portrait path for unit selection / info panel. */
 function portraitPath(metaId: string): string | null {
-  const PORTRAIT_UNITS = new Set(["b1","b2","b3","b4","f1","f2","f3","f4","r1","r2","r3","r4","t1","t2","t3"]);
+  const PORTRAIT_UNITS = new Set(["b1","b2","r1","r2","t1","t2"]);
   if (!PORTRAIT_UNITS.has(metaId)) return null;
   return `/sprites/portraits/${metaId}.png`;
 }
