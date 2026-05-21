@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>타일 텍스처 프리뷰</title>
+<style>
+  body { background: #1a1a2e; font-family: "Segoe UI", sans-serif; color: #ccc; padding: 24px; }
+  h1 { color: #88aaff; margin-bottom: 4px; font-size: 20px; }
+  p  { color: #667; font-size: 13px; margin-bottom: 24px; }
+  .grid { display: flex; flex-wrap: wrap; gap: 16px; }
+  .tile-card {
+    display: flex; flex-direction: column; align-items: center; gap: 6px;
+  }
+  .tile-label {
+    font-size: 12px; color: #8899bb; text-align: center;
+    background: rgba(255,255,255,0.05); padding: 2px 8px; border-radius: 4px;
+  }
+  .tile-label .flag {
+    font-size: 10px; color: #cc4444; margin-left: 4px;
+  }
+</style>
+</head>
+<body>
+<h1>타일 텍스처 프리뷰</h1>
+<p>각 타일 타입별 절차적 Canvas 텍스처. 산(mountain) 타일은 <span style="color:#cc4444">통과불가(impassable)</span> 붉은 테두리.</p>
+<div class="grid" id="grid"></div>
+
+<script>
+// ── 타일 정의 ──────────────────────────────────────────────────────────────────
+const TILE_COLORS = {
+  plain:    "#3a5c3e",
+  road:     "#7a6448",
+  sand:     "#b8953e",
+  mountain: "#5a5a6a",
+  river:    "#1e4fa0",
+  water:    "#2d6aad",
+  fire:     "#b82200",
+  acid:     "#559900",
+  ice:      "#7abce8",
+  electric: "#d4b800",
+};
+const TILE_SIDE_COLORS = {
+  plain:    "#2a3e2c",
+  road:     "#564530",
+  sand:     "#8c6c2a",
+  mountain: "#3c3c48",
+  river:    "#142e60",
+  water:    "#1e4a78",
+  fire:     "#7a1500",
+  acid:     "#3a6600",
+  ice:      "#4a8cb0",
+  electric: "#9a8400",
+};
+// mountain은 impassable 예시
+const IMPASSABLE = new Set(["mountain"]);
+
+const TILE_TEXTURE_RENDERERS = {
+  plain(ctx, sx, sy, HW, HH) {
+    ctx.strokeStyle = "rgba(100,200,80,0.45)";
+    ctx.lineWidth = Math.max(1, HW * 0.06);
+    const cx = sx, cy = sy + HH, step = HW * 0.35;
+    for (let di = -1; di <= 1; di++) {
+      for (let dj = -1; dj <= 1; dj++) {
+        const bx = cx + di * step, by = cy + dj * (HH * 0.4);
+        ctx.beginPath();
+        ctx.moveTo(bx - HW*0.06, by + HH*0.1); ctx.lineTo(bx, by - HH*0.22);
+        ctx.moveTo(bx + HW*0.06, by + HH*0.1); ctx.lineTo(bx, by - HH*0.22);
+        ctx.stroke();
+      }
+    }
+  },
+  mountain(ctx, sx, sy, HW, HH) {
+    const cx = sx, cy = sy + HH;
+    ctx.beginPath();
+    ctx.moveTo(cx - HW*0.55, cy + HH*0.3);
+    ctx.lineTo(cx, cy - HH*0.6);
+    ctx.lineTo(cx + HW*0.55, cy + HH*0.3);
+    ctx.closePath();
+    ctx.fillStyle = "rgba(80,80,95,0.7)"; ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(cx - HW*0.18, cy - HH*0.28);
+    ctx.lineTo(cx, cy - HH*0.6);
+    ctx.lineTo(cx + HW*0.18, cy - HH*0.28);
+    ctx.closePath();
+    ctx.fillStyle = "rgba(235,240,255,0.75)"; ctx.fill();
+  },
+  river(ctx, sx, sy, HW, HH) {
+    ctx.strokeStyle = "rgba(100,180,255,0.65)";
+    ctx.lineWidth = Math.max(1, HH * 0.18); ctx.lineCap = "round";
+    for (let i = 0; i < 3; i++) {
+      const baseY = sy + HH * (0.55 + i * 0.35);
+      ctx.beginPath();
+      ctx.moveTo(sx - HW*0.85, baseY);
+      ctx.bezierCurveTo(sx - HW*0.4, baseY - HH*0.18, sx + HW*0.4, baseY + HH*0.18, sx + HW*0.85, baseY);
+      ctx.stroke();
+    }
+  },
+  water(ctx, sx, sy, HW, HH) {
+    const cx = sx, cy = sy + HH;
+    ctx.strokeStyle = "rgba(160,220,255,0.5)";
+    for (let r = 1; r <= 3; r++) {
+      ctx.lineWidth = Math.max(0.5, HH*0.1);
+      ctx.beginPath(); ctx.ellipse(cx, cy, HW*0.25*r, HH*0.25*r, 0, 0, Math.PI*2); ctx.stroke();
+    }
+  },
+  fire(ctx, sx, sy, HW, HH) {
+    const cx = sx, baseY = sy + HH*1.8;
+    const flames = [
+      { dx:0, scale:1.0, col:"rgba(255,200,60,0.8)" },
+      { dx:-HW*0.28, scale:0.7, col:"rgba(255,130,30,0.65)" },
+      { dx: HW*0.28, scale:0.7, col:"rgba(255,130,30,0.65)" },
+    ];
+    for (const { dx, scale, col } of flames) {
+      const fx = cx + dx;
+      ctx.beginPath();
+      ctx.moveTo(fx, baseY);
+      ctx.bezierCurveTo(fx - HW*0.2*scale, baseY - HH*0.7*scale, fx + HW*0.2*scale, baseY - HH*1.2*scale, fx, baseY - HH*1.6*scale);
+      ctx.strokeStyle = col; ctx.lineWidth = Math.max(1, HW*0.18*scale); ctx.lineCap = "round"; ctx.stroke();
+    }
+  },
+  sand(ctx, sx, sy, HW, HH) {
+    ctx.fillStyle = "rgba(220,190,120,0.55)";
+    const cx = sx, cy = sy + HH, cols = 5, rows = 4, r = Math.max(1, HW*0.055);
+    for (let ri = 0; ri < rows; ri++) for (let ci = 0; ci < cols; ci++) {
+      const ox = (ci-(cols-1)/2)*HW*0.36 + (ri%2===0 ? 0 : HW*0.18);
+      const oy = (ri-(rows-1)/2)*HH*0.38;
+      ctx.beginPath(); ctx.arc(cx+ox, cy+oy, r, 0, Math.PI*2); ctx.fill();
+    }
+  },
+  ice(ctx, sx, sy, HW, HH) {
+    const cx = sx, cy = sy + HH, len = HW*0.6;
+    ctx.strokeStyle = "rgba(200,240,255,0.8)"; ctx.lineWidth = Math.max(1, HW*0.07); ctx.lineCap = "round";
+    for (let i = 0; i < 6; i++) {
+      const angle = (i*Math.PI)/3;
+      ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.cos(angle)*len, cy + Math.sin(angle)*len*0.5); ctx.stroke();
+      const bx = cx + Math.cos(angle)*len*0.55, by = cy + Math.sin(angle)*len*0.55*0.5;
+      const perp = angle + Math.PI/2, bl = len*0.2;
+      ctx.beginPath();
+      ctx.moveTo(bx + Math.cos(perp)*bl, by + Math.sin(perp)*bl*0.5);
+      ctx.lineTo(bx - Math.cos(perp)*bl, by - Math.sin(perp)*bl*0.5); ctx.stroke();
+    }
+  },
+  electric(ctx, sx, sy, HW, HH) {
+    const cx = sx, top = sy + HH*0.15, bot = sy + HH*1.85, seg = (bot-top)/4;
+    const pts = [
+      [cx + HW*0.12, top], [cx - HW*0.22, top+seg], [cx + HW*0.05, top+seg*2],
+      [cx - HW*0.22, top+seg*3], [cx + HW*0.12, bot],
+    ];
+    ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]);
+    for (const pt of pts.slice(1)) ctx.lineTo(pt[0], pt[1]);
+    ctx.strokeStyle = "rgba(255,240,80,0.9)"; ctx.lineWidth = Math.max(1.5, HW*0.1);
+    ctx.lineJoin = "round"; ctx.lineCap = "round"; ctx.stroke();
+    ctx.strokeStyle = "rgba(255,255,200,0.4)"; ctx.lineWidth = Math.max(3, HW*0.22); ctx.stroke();
+  },
+  acid(ctx, sx, sy, HW, HH) {
+    ctx.strokeStyle = "rgba(180,255,80,0.7)"; ctx.lineWidth = Math.max(0.8, HW*0.055);
+    const cx = sx, cy = sy + HH;
+    const bubbles = [[-0.38,0,0.16],[0.30,-0.15,0.12],[0.10,0.32,0.14],[-0.12,-0.35,0.10],[0.38,0.30,0.09]];
+    for (const [bx, by, br] of bubbles) {
+      ctx.beginPath(); ctx.arc(cx + bx*HW, cy + by*HH, br*HW, 0, Math.PI*2); ctx.stroke();
+    }
+  },
+  road(ctx, sx, sy, HW, HH) {
+    ctx.strokeStyle = "rgba(200,180,140,0.5)"; ctx.lineWidth = Math.max(1, HW*0.07);
+    ctx.setLineDash([HH*0.3, HH*0.2]);
+    for (const dx of [-HW*0.2, HW*0.2]) {
+      ctx.beginPath();
+      ctx.moveTo(sx + dx - HW*0.65, sy + HH*0.55 + (dx > 0 ? HH*0.45 : -HH*0.45));
+      ctx.lineTo(sx + dx + HW*0.65, sy + HH*1.45 + (dx > 0 ? HH*0.45 : -HH*0.45));
+      ctx.stroke();
+    }
+    ctx.setLineDash([]);
+  },
+};
+
+// ── 렌더 함수 ─────────────────────────────────────────────────────────────────
+function drawTile(ctx, sx, sy, HW, HH, DEPTH, topColor, sideColor, tileType, impassable) {
+  // Top face with clip
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(sx, sy); ctx.lineTo(sx+HW, sy+HH); ctx.lineTo(sx, sy+HH*2); ctx.lineTo(sx-HW, sy+HH);
+  ctx.closePath(); ctx.clip();
+  ctx.fillStyle = topColor; ctx.fillRect(sx-HW, sy, HW*2, HH*2+1);
+  const renderer = TILE_TEXTURE_RENDERERS[tileType];
+  if (renderer) renderer(ctx, sx, sy, HW, HH);
+  ctx.restore();
+
+  // Outline
+  ctx.beginPath();
+  ctx.moveTo(sx, sy); ctx.lineTo(sx+HW, sy+HH); ctx.lineTo(sx, sy+HH*2); ctx.lineTo(sx-HW, sy+HH);
+  ctx.closePath();
+  if (impassable) { ctx.strokeStyle = "rgba(220,50,50,0.8)"; ctx.lineWidth = Math.max(1.5, HW*0.05); }
+  else            { ctx.strokeStyle = "rgba(0,0,0,0.25)";    ctx.lineWidth = 0.5; }
+  ctx.stroke();
+
+  // Left side
+  ctx.beginPath();
+  ctx.moveTo(sx-HW, sy+HH); ctx.lineTo(sx, sy+HH*2); ctx.lineTo(sx, sy+HH*2+DEPTH); ctx.lineTo(sx-HW, sy+HH+DEPTH);
+  ctx.closePath(); ctx.fillStyle = sideColor; ctx.fill();
+  ctx.strokeStyle = "rgba(0,0,0,0.3)"; ctx.lineWidth = 0.5; ctx.stroke();
+
+  // Right side
+  ctx.beginPath();
+  ctx.moveTo(sx, sy+HH*2); ctx.lineTo(sx+HW, sy+HH); ctx.lineTo(sx+HW, sy+HH+DEPTH); ctx.lineTo(sx, sy+HH*2+DEPTH);
+  ctx.closePath(); ctx.fillStyle = sideColor+"cc"; ctx.fill();
+  ctx.strokeStyle = "rgba(0,0,0,0.3)"; ctx.lineWidth = 0.5; ctx.stroke();
+}
+
+// ── 카드 생성 ─────────────────────────────────────────────────────────────────
+const TW = 96, TH = 48, HW = 48, HH = 24, DEPTH = 12;
+const CW = TW + 8, CH = TH + DEPTH + HH + 8;
+const SX = CW / 2, SY = HH + 4;
+
+const TILES = Object.keys(TILE_COLORS);
+const grid = document.getElementById("grid");
+
+for (const type of TILES) {
+  const card = document.createElement("div");
+  card.className = "tile-card";
+
+  const canvas = document.createElement("canvas");
+  canvas.width = CW; canvas.height = CH;
+  canvas.style.cssText = "border-radius:4px;";
+  const ctx = canvas.getContext("2d");
+
+  const top  = TILE_COLORS[type]  || "#3a5c3e";
+  const side = TILE_SIDE_COLORS[type] || "#2a3e2c";
+  const imp  = IMPASSABLE.has(type);
+
+  drawTile(ctx, SX, SY, HW, HH, DEPTH, top, side, type, imp);
+
+  const label = document.createElement("div");
+  label.className = "tile-label";
+  label.innerHTML = type + (imp ? '<span class="flag">⛔</span>' : '');
+
+  card.appendChild(canvas);
+  card.appendChild(label);
+  grid.appendChild(card);
+}
+</script>
+</body>
+</html>
