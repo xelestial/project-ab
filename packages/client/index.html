@@ -436,6 +436,13 @@
       display: flex;
       align-items: center;
       justify-content: center;
+      position: relative;
+    }
+    #anim-canvas {
+      position: absolute;
+      pointer-events: none;
+      z-index: 10;
+      image-rendering: pixelated;
     }
     #board-canvas {
       display: block;
@@ -1094,6 +1101,7 @@
       <!-- Full-height board -->
       <div class="board-wrap">
         <canvas id="board-canvas"></canvas>
+        <canvas id="anim-canvas"></canvas>
       </div>
 
       <!-- Floating unit info panel (canvas click) -->
