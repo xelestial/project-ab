@@ -19,11 +19,19 @@ export interface ITileTransitionResolver {
   /**
    * Unit enters a tile — voluntary move or knockback destination.
    * Does NOT handle river (that uses unit_river_enter).
+   *
+   * Overload 1: explicit tile attribute (used by resolvers that already know it)
+   * Overload 2: looks up tile attribute from state.map.tiles at destinationPos
    */
   resolveUnitEntersTile(
     unit: UnitState,
     destinationPos: Position,
     tileAttr: TileAttributeType,
+    state: GameState,
+  ): GameChange[];
+  resolveUnitEntersTile(
+    unit: UnitState,
+    destinationPos: Position,
     state: GameState,
   ): GameChange[];
 }
@@ -34,9 +42,21 @@ export class TileTransitionResolver implements ITileTransitionResolver {
   resolveUnitEntersTile(
     unit: UnitState,
     destinationPos: Position,
-    tileAttr: TileAttributeType,
-    state: GameState,
+    tileAttrOrState: TileAttributeType | GameState,
+    state?: GameState,
   ): GameChange[] {
+    let tileAttr: TileAttributeType;
+    let resolvedState: GameState;
+    if (state === undefined) {
+      // 3-arg form: tileAttrOrState is GameState, look up tile from map
+      resolvedState = tileAttrOrState as GameState;
+      const tileKey = posKey(destinationPos);
+      tileAttr = resolvedState.map.tiles[tileKey]?.attribute ?? (resolvedState.map.baseTile as TileAttributeType | undefined) ?? "plain";
+    } else {
+      // 4-arg form: explicit tileAttr
+      tileAttr = tileAttrOrState as TileAttributeType;
+      resolvedState = state;
+    }
     const changes: GameChange[] = [];
 
     // ── Step 0: Check passives ────────────────────────────────────────────────
@@ -100,11 +120,11 @@ export class TileTransitionResolver implements ITileTransitionResolver {
           }
         } else if (action.type === "spread_entered_tile_attr") {
           // Spread the original tileAttr to 4 orthogonal neighbors
-          const neighbors = getOrthogonalNeighbors(destinationPos, state.map.gridSize);
+          const neighbors = getOrthogonalNeighbors(destinationPos, resolvedState.map.gridSize);
           for (const neighbor of neighbors) {
             const neighborKey = posKey(neighbor);
-            const neighborTile = state.map.tiles[neighborKey];
-            const neighborAttr: TileAttributeType = neighborTile?.attribute ?? state.map.baseTile ?? "plain";
+            const neighborTile = resolvedState.map.tiles[neighborKey];
+            const neighborAttr: TileAttributeType = neighborTile?.attribute ?? (resolvedState.map.baseTile as TileAttributeType | undefined) ?? "plain";
             if (neighborAttr !== tileAttr) {
               changes.push({
                 type: "tile_attribute_change",

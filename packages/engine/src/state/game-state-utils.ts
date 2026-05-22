@@ -170,6 +170,23 @@ export function linePositions(from: Position, to: Position, gridSize: number = G
 }
 
 /**
+ * Returns all positions in a ray from `from` in the direction of `to`,
+ * continuing PAST `to` until the grid boundary. Does NOT include `from`.
+ * Use this for penetrating attacks that propagate beyond the primary target.
+ */
+export function lineRay(from: Position, to: Position, gridSize: number = GRID_SIZE): Position[] {
+  const delta = directionDelta(from, to);
+  if (delta === null) return [];
+  const positions: Position[] = [];
+  let cur: Position = { row: from.row + delta.dRow, col: from.col + delta.dCol };
+  while (isInBounds(cur, gridSize)) {
+    positions.push(cur);
+    cur = { row: cur.row + delta.dRow, col: cur.col + delta.dCol };
+  }
+  return positions;
+}
+
+/**
  * Returns all positions within manhattan `radius` of `center`.
  */
 export function areaPositions(center: Position, radius: number, includeCenter: boolean, gridSize: number = GRID_SIZE): Position[] {

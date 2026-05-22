@@ -11,6 +11,7 @@ import {
   hasEffect,
   isInBounds,
   linePositions,
+  lineRay,
   getUnitAt,
   getTileAttribute,
 } from "../state/game-state-utils.js";
@@ -219,10 +220,11 @@ export class AttackValidator implements IAttackValidator {
 
       case "penetrate": {
         // Primary target + tiles behind along same direction (blocked by shield unit)
-        const line = linePositions(from, target, gridSizeForCalc);
+        // lineRay continues PAST target to the grid boundary
+        const ray = lineRay(from, target, gridSizeForCalc);
         const result: AffectedPosition[] = [];
         let passedTarget = false;
-        for (const pos of line) {
+        for (const pos of ray) {
           if (!passedTarget && !posEqual(pos, target)) continue;
           if (posEqual(pos, target)) {
             passedTarget = true;

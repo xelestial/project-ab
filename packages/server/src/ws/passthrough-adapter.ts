@@ -15,11 +15,15 @@ export class PassThroughAdapter implements IPlayerAdapter {
   private stateListeners: ((state: GameState) => void)[] = [];
   private pendingUnitOrderResolve: ((order: UnitId[]) => void) | undefined = undefined;
   private pendingUnitOrderTimer: ReturnType<typeof setTimeout> | undefined = undefined;
+  /** Actions submitted before requestAction is called are queued here. */
+  private actionQueue: PlayerAction[] = [];
 
   constructor(readonly playerId: string) {}
 
   /**
    * Submit an action from an external source (e.g. REST endpoint).
+   * If requestAction is already waiting (pendingResolve is set), resolves it immediately.
+   * Otherwise queues the action so the next requestAction call returns it right away.
    */
   submitAction(action: PlayerAction): void {
     if (this.pendingResolve !== undefined) {
@@ -28,6 +32,9 @@ export class PassThroughAdapter implements IPlayerAdapter {
       const resolve = this.pendingResolve;
       this.pendingResolve = undefined;
       resolve(action);
+    } else {
+      // Not the player's turn yet — queue for the next requestAction call
+      this.actionQueue.push(action);
     }
   }
 
@@ -87,6 +94,11 @@ export class PassThroughAdapter implements IPlayerAdapter {
 
   async requestAction(state: GameState, timeoutMs: number): Promise<PlayerAction> {
     this.onStateUpdate(state);
+
+    // Drain queued action (submitted before the turn started)
+    if (this.actionQueue.length > 0) {
+      return Promise.resolve(this.actionQueue.shift()!);
+    }
 
     return new Promise((resolve) => {
       this.pendingTimer = setTimeout(() => {

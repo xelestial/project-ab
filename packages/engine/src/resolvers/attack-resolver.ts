@@ -562,11 +562,18 @@ export class AttackResolver implements IAttackResolver {
       };
 
       if (!isInBounds(newPos, state.map.gridSize)) {
+        // Unit hit the grid boundary — clamp to last valid position (in-bounds).
+        // step === 0: unit was already at the edge, to = current position (no movement)
+        // step  > 0: unit moved (step) valid steps; last valid pos is step * delta from start
+        const lastValidPos: Position = {
+          row: target.position.row + delta.dRow * step,
+          col: target.position.col + delta.dCol * step,
+        };
         changes.push({
           type: "unit_knockback",
           unitId: target.unitId,
           from: target.position,
-          to: newPos,
+          to: lastValidPos,
           blockedBy: "wall",
         });
         return changes;
