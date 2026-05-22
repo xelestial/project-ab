@@ -571,6 +571,7 @@ function spritePath(metaId: string, direction: "front-left" | "front-right" | "b
     "b1","b2","b3","b4",
     "a1","a2","a3","a4",
     "u1","u2","u3","u4",
+    "obstacle_electric_pylon",
   ]);
   if (!SPRITE_UNITS.has(metaId)) return null;
   return `/sprites/units/${metaId}-${direction}.png`;
@@ -585,6 +586,7 @@ function portraitPath(metaId: string): string | null {
     "b1","b2","b3","b4",
     "a1","a2","a3","a4",
     "u1","u2","u3","u4",
+    "obstacle_electric_pylon",
   ]);
   if (!PORTRAIT_UNITS.has(metaId)) return null;
   return `/sprites/portraits/${metaId}.png`;
