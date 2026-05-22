@@ -109,8 +109,12 @@ let roomsRefreshInterval: ReturnType<typeof setInterval> | null = null;
 // ─── Unit metadata ─────────────────────────────────────────────────────────────
 
 const UNIT_ABBR: Record<string, string> = {
-  t1: "T", t2: "T", t3: "T", f1: "F", f2: "F", f3: "F", f4: "F",
-  r1: "R", r2: "R", r3: "R", r4: "R", b1: "B", b2: "B", b3: "B", b4: "B",
+  t1: "T", t2: "T", t3: "T", t4: "T",
+  f1: "F", f2: "F", f3: "F", f4: "F",
+  r1: "R", r2: "R", r3: "R", r4: "R",
+  b1: "B", b2: "B", b3: "B", b4: "B",
+  a1: "A", a2: "A", a3: "A", a4: "A",
+  u1: "U", u2: "U", u3: "U", u4: "U",
   m1: "M", k1: "K", s1: "S",
 };
 
@@ -122,10 +126,12 @@ const UNIT_BASE_HEALTH: Record<string, number> = {
 };
 
 const UNIT_NAME_KO: Record<string, string> = {
-  t1: "탱커1", t2: "탱커2", t3: "탱커3",
+  t1: "탱커1", t2: "탱커2", t3: "탱커3", t4: "탱커4",
   f1: "파이터1", f2: "파이터2", f3: "파이터3", f4: "파이터4",
   r1: "레인저1", r2: "레인저2", r3: "레인저3", r4: "레인저4",
   b1: "브루트1", b2: "브루트2", b3: "브루트3", b4: "브루트4",
+  a1: "아틸러리1", a2: "아틸러리2", a3: "아틸러리3", a4: "아틸러리4",
+  u1: "유틸리티1", u2: "유틸리티2", u3: "유틸리티3", u4: "유틸리티4",
   m1: "메이지", k1: "나이트", s1: "서포트",
 };
 
@@ -140,7 +146,8 @@ const SKILL_DESC_KO: Record<string, string> = {
 
 const UNIT_COLOR: Record<string, string> = {
   tanker: "#5b8dd9", fighter: "#d95b5b", ranger: "#5bd95b",
-  brute: "#c97a2a", mage: "#9b5bd9", support: "#d9c05b",
+  brute: "#c97a2a", artillery: "#d9c83c", utility: "#3cd9d9",
+  mage: "#9b5bd9", support: "#d9c05b",
 };
 
 const UNIT_EMOJI: Record<string, string> = {
@@ -557,14 +564,28 @@ function preloadSprites(): void {
 
 /** Returns the sprite path for a unit+direction, or null if no sprite exists. */
 function spritePath(metaId: string, direction: "front-left" | "front-right" | "back-left" | "back-right"): string | null {
-  const SPRITE_UNITS = new Set(["b1","b2","r1","r2","t1","t2"]);
+  const SPRITE_UNITS = new Set([
+    "t1","t2","t3","t4",
+    "f1","f2","f3","f4",
+    "r1","r2","r3","r4",
+    "b1","b2","b3","b4",
+    "a1","a2","a3","a4",
+    "u1","u2","u3","u4",
+  ]);
   if (!SPRITE_UNITS.has(metaId)) return null;
   return `/sprites/units/${metaId}-${direction}.png`;
 }
 
 /** Portrait path for unit selection / info panel. */
 function portraitPath(metaId: string): string | null {
-  const PORTRAIT_UNITS = new Set(["b1","b2","r1","r2","t1","t2"]);
+  const PORTRAIT_UNITS = new Set([
+    "t1","t2","t3","t4",
+    "f1","f2","f3","f4",
+    "r1","r2","r3","r4",
+    "b1","b2","b3","b4",
+    "a1","a2","a3","a4",
+    "u1","u2","u3","u4",
+  ]);
   if (!PORTRAIT_UNITS.has(metaId)) return null;
   return `/sprites/portraits/${metaId}.png`;
 }
