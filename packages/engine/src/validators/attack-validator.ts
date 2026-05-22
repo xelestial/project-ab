@@ -7,6 +7,8 @@ import type { IDataRegistry } from "@ab/metadata";
 import { ErrorCode, VALID, invalid } from "@ab/metadata";
 import {
   isFrozen,
+  isActionBlocked,
+  hasEffect,
   isInBounds,
   linePositions,
   getUnitAt,
@@ -47,9 +49,12 @@ export class AttackValidator implements IAttackValidator {
   constructor(private readonly registry: IDataRegistry) {}
 
   validateAttack(unit: UnitState, target: Position, state: GameState, options?: AttackOptions): AttackValidation {
-    // 1. Frozen
+    // 1. Frozen / stunned (blocks all actions)
     if (isFrozen(unit)) {
       return { valid: false, errorCode: ErrorCode.ATTACK_FROZEN };
+    }
+    if (hasEffect(unit, "stun")) {
+      return { valid: false, errorCode: ErrorCode.ATTACK_STUN };
     }
 
     // 2. Already attacked
@@ -64,37 +69,61 @@ export class AttackValidator implements IAttackValidator {
 
     const unitMeta = this.registry.getUnit(unit.metaId);
     const weaponId = options?.overrideWeaponId ?? unitMeta.primaryWeaponId;
+    if (weaponId === undefined) return { valid: false, errorCode: ErrorCode.ATTACK_INVALID_TARGET };
     const weapon = this.registry.getWeapon(weaponId);
 
-    // 4. Range check — orthogonal straight lines only (no diagonal attacks)
+    // 4. Confusion check — confused units cannot use the blocked attack type
+    const confusedEff = unit.activeEffects.find((e) => e.effectType === "confused");
+    if (confusedEff !== undefined) {
+      const confusedMeta = this.registry.getEffect(confusedEff.effectId as string);
+      if (confusedMeta.blocksAttackType === weapon.attackType) {
+        return { valid: false, errorCode: ErrorCode.ATTACK_CONFUSED };
+      }
+    }
+
+    // 5. Self-targeting guard — only weapons with canTargetSelf may target own tile
+    if (posEqual(target, unit.position) && weapon.canTargetSelf !== true) {
+      return { valid: false, errorCode: ErrorCode.ATTACK_INVALID_TARGET };
+    }
+
+    // 6. Range check — orthogonal straight lines only (no diagonal attacks)
     const dist = orthogonalDist(unit.position, target);
     if (dist === null || dist < weapon.minRange || dist > weapon.maxRange) {
       return { valid: false, errorCode: ErrorCode.ATTACK_OUT_OF_RANGE };
     }
 
-    // 5. Clear-path check (for rush and pull weapons)
+    // 8. Clear-path check (for rush and pull weapons)
     if (weapon.rush?.requiresClearPath === true || weapon.requiresClearPath === true) {
       if (!hasClearPath(unit.position, target, state)) {
         return { valid: false, errorCode: ErrorCode.ATTACK_NO_LOS };
       }
     }
 
-    // 6. Attack-type specific checks
+    // 9. Attack-type specific checks
     const typeCheck = this.checkAttackType(weapon, unit, target, state);
     if (!typeCheck.valid) return typeCheck;
 
-    // 7. Calculate affected positions
+    // 10. Calculate affected positions
     const affected = this.calcAffectedPositions(weapon, unit.position, target, state);
 
     return { valid: true, affectedPositions: affected };
   }
 
   getAttackableTargets(unit: UnitState, state: GameState, options?: AttackOptions): Position[] {
-    if (isFrozen(unit) || unit.actionsUsed.attacked) return [];
+    if (isActionBlocked(unit) || unit.actionsUsed.attacked) return [];
 
     const unitMeta = this.registry.getUnit(unit.metaId);
     const weaponId = options?.overrideWeaponId ?? unitMeta.primaryWeaponId;
+    if (weaponId === undefined) return [];
     const weapon = this.registry.getWeapon(weaponId);
+
+    // Confused for this weapon's attack type → no valid targets
+    const confusedEff = unit.activeEffects.find((e) => e.effectType === "confused");
+    if (confusedEff !== undefined) {
+      const confusedMeta = this.registry.getEffect(confusedEff.effectId as string);
+      if (confusedMeta.blocksAttackType === weapon.attackType) return [];
+    }
+
     const targets: Position[] = [];
     const gs = state.map.gridSize;
 
@@ -104,6 +133,8 @@ export class AttackValidator implements IAttackValidator {
       for (let col = 0; col < gs; col++) {
         if (row !== ur && col !== uc) continue; // diagonal — skip
         const pos: Position = { row, col };
+        // Skip self-tile if weapon doesn't allow self-targeting
+        if (!weapon.canTargetSelf && posEqual(pos, unit.position)) continue;
         const dist = orthogonalDist(unit.position, pos);
         if (dist === null || dist < weapon.minRange || dist > weapon.maxRange) continue;
         const check = this.checkAttackType(weapon, unit, pos, state);
@@ -121,6 +152,18 @@ export class AttackValidator implements IAttackValidator {
     target: Position,
     state: GameState,
   ): ValidationResult {
+    // spawnObstacle weapons: target tile must be empty (no unit) and not impassable
+    if (weapon.spawnObstacle !== undefined) {
+      if (getUnitAt(state, target) !== undefined) {
+        return invalid(ErrorCode.ATTACK_INVALID_TARGET);
+      }
+      const tileAttr = getTileAttribute(state, target);
+      if (tileAttr === "mountain" || tileAttr === "river") {
+        return invalid(ErrorCode.ATTACK_INVALID_TARGET);
+      }
+      return VALID;
+    }
+
     switch (weapon.attackType) {
       case "melee":
         // Melee: target must be adjacent (minRange=1, maxRange=1 enforced above)
@@ -257,6 +300,17 @@ function posEqual(a: Position, b: Position): boolean {
 
 function unitHasShield(unit: UnitState, registry: IDataRegistry): boolean {
   const meta = registry.getUnit(unit.metaId);
+  // New passive system: block_penetration action
+  const hasPassiveShield = meta.passiveIds.some((pid) => {
+    try {
+      const passive = registry.getUnitPassive(pid as string);
+      return passive.actions.some((a) => a.type === "block_penetration");
+    } catch {
+      return false;
+    }
+  });
+  if (hasPassiveShield) return true;
+  // Legacy: skill-based shield (backward compat with test fixtures using skillIds)
   return meta.skillIds.includes("skill_shield_defend" as MetaId);
 }
 

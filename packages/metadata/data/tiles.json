@@ -58,7 +58,8 @@
     "moveCost": 1,
     "cannotStop": false,
     "impassable": false,
-    "damagePerTurn": 2,
+    "damagePerTurn": 1,
+    "ignoresArmor": true,
     "appliesEffectId": "effect_fire"
   },
   {
@@ -81,6 +82,7 @@
     "cannotStop": false,
     "impassable": false,
     "damagePerTurn": 1,
+    "ignoresArmor": true,
     "appliesEffectId": "effect_acid"
   },
   {
@@ -92,6 +94,7 @@
     "cannotStop": false,
     "impassable": false,
     "damagePerTurn": 1,
+    "ignoresArmor": true,
     "appliesEffectId": "effect_electric"
   },
   {

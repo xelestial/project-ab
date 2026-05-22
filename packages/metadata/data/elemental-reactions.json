@@ -16,5 +16,26 @@
     "targetEffect": "fire",
     "damageMultiplier": 0,
     "removedEffects": ["fire"]
+  },
+  {
+    "attackAttr": "electric",
+    "targetEffect": "water",
+    "damageMultiplier": 1,
+    "removedEffects": ["water"],
+    "appliesEffectId": "effect_stun",
+    "removeTileAttr": "water"
+  },
+  {
+    "attackAttr": "ice",
+    "targetEffect": "none",
+    "damageMultiplier": 1,
+    "appliesEffectId": "effect_freeze"
+  },
+  {
+    "attackAttr": "ice",
+    "targetEffect": "water",
+    "fixedDamage": 2,
+    "removedEffects": ["water"],
+    "appliesEffectId": "effect_freeze"
   }
 ]

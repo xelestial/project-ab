@@ -18,6 +18,7 @@ import { MovementResolver } from "../resolvers/movement-resolver.js";
 import { AttackResolver } from "../resolvers/attack-resolver.js";
 import { EffectResolver } from "../resolvers/effect-resolver.js";
 import { TileResolver } from "../resolvers/tile-resolver.js";
+import { PassiveResolver } from "../resolvers/passive-resolver.js";
 import { HealthManager } from "../managers/health-manager.js";
 import { EffectManager } from "../managers/effect-manager.js";
 import { TileManager } from "../managers/tile-manager.js";
@@ -67,10 +68,11 @@ export class GameFactory {
     const attackResolver = new AttackResolver(attackValidator, this.registry, tileTransitionResolver);
     const effectResolver = new EffectResolver(effectValidator, this.registry);
     const tileResolver = new TileResolver(tileValidator, this.registry);
+    const passiveResolver = new PassiveResolver(this.registry);
 
     // ── Managers ───────────────────────────────────────────────────────────
     const healthManager = new HealthManager(applicator);
-    const effectManager = new EffectManager(effectResolver, applicator);
+    const effectManager = new EffectManager(effectResolver, applicator, passiveResolver);
     const tileManager = new TileManager(tileResolver, applicator);
     const turnManager = new TurnManager(applicator);
     const draftManager = new DraftManager(this.registry, applicator);
@@ -90,6 +92,7 @@ export class GameFactory {
       effectManager,
       tileManager,
       this.registry,
+      passiveResolver,
     );
     const postProcessor = new PostProcessor(healthManager, endDetector);
 

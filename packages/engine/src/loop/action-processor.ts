@@ -14,6 +14,7 @@ import type { IHealthManager } from "../managers/health-manager.js";
 import type { IEffectManager } from "../managers/effect-manager.js";
 import type { ITileManager } from "../managers/tile-manager.js";
 import type { IDataRegistry } from "@ab/metadata";
+import type { IPassiveResolver } from "../resolvers/passive-resolver.js";
 import { ErrorCode } from "@ab/metadata";
 
 export interface ActionResult {
@@ -40,6 +41,7 @@ export class ActionProcessor implements IActionProcessor {
     private readonly effectManager: IEffectManager,
     private readonly tileManager: ITileManager,
     private readonly registry: IDataRegistry,
+    private readonly passiveResolver?: IPassiveResolver,
   ) {}
 
   process(action: PlayerAction, state: GameState): ActionResult {
@@ -144,6 +146,18 @@ export class ActionProcessor implements IActionProcessor {
         },
       },
     };
+
+    // on_attack passive triggers (e.g. agility bonus_move)
+    if (this.passiveResolver !== undefined) {
+      const attackerAfter = newState.units[action.unitId];
+      if (attackerAfter !== undefined && attackerAfter.alive) {
+        const passiveChanges = this.passiveResolver.resolveOnAttack(attackerAfter, newState);
+        if (passiveChanges.length > 0) {
+          newState = this.applicator.apply(passiveChanges, newState);
+          changes.push(...passiveChanges);
+        }
+      }
+    }
 
     // Post-attack: check deaths
     newState = this.healthManager.applyDeaths(newState);

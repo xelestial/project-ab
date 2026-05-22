@@ -6,11 +6,13 @@
     "effectType": "freeze",
     "damagePerTurn": 0,
     "blocksAllActions": true,
+    "blocksDamage": true,
     "alsoAffectsTile": false,
     "clearsAllEffectsOnApply": true,
     "removeConditions": [
       { "type": "turns", "count": 1 },
-      { "type": "collision_with_frozen" }
+      { "type": "collision_with_frozen" },
+      { "type": "on_hit" }
     ]
   },
   {
@@ -19,6 +21,7 @@
     "descKey": "effect.fire.desc",
     "effectType": "fire",
     "damagePerTurn": 1,
+    "ignoresArmor": true,
     "blocksAllActions": false,
     "alsoAffectsTile": false,
     "removeConditions": [
@@ -33,6 +36,7 @@
     "descKey": "effect.acid.desc",
     "effectType": "acid",
     "damagePerTurn": 1,
+    "ignoresArmor": true,
     "blocksAllActions": false,
     "alsoAffectsTile": true,
     "removeConditions": [
@@ -70,10 +74,49 @@
     "descKey": "effect.electric.desc",
     "effectType": "electric",
     "damagePerTurn": 1,
+    "ignoresArmor": true,
     "blocksAllActions": false,
     "alsoAffectsTile": false,
     "removeConditions": [
       { "type": "turns", "count": 1 }
+    ]
+  },
+  {
+    "id": "effect_stun",
+    "nameKey": "effect.stun.name",
+    "descKey": "effect.stun.desc",
+    "effectType": "stun",
+    "damagePerTurn": 0,
+    "blocksAllActions": true,
+    "alsoAffectsTile": false,
+    "removeConditions": [
+      { "type": "turns", "count": 1 }
+    ]
+  },
+  {
+    "id": "effect_confused_ranged",
+    "nameKey": "effect.confused_ranged.name",
+    "descKey": "effect.confused_ranged.desc",
+    "effectType": "confused",
+    "damagePerTurn": 0,
+    "blocksAllActions": false,
+    "alsoAffectsTile": false,
+    "blocksAttackType": "ranged",
+    "removeConditions": [
+      { "type": "turns", "count": 2 }
+    ]
+  },
+  {
+    "id": "effect_confused_melee",
+    "nameKey": "effect.confused_melee.name",
+    "descKey": "effect.confused_melee.desc",
+    "effectType": "confused",
+    "damagePerTurn": 0,
+    "blocksAllActions": false,
+    "alsoAffectsTile": false,
+    "blocksAttackType": "melee",
+    "removeConditions": [
+      { "type": "turns", "count": 2 }
     ]
   }
 ]

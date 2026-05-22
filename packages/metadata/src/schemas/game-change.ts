@@ -107,6 +107,26 @@ export const UnitActionsResetChangeSchema = z.object({
   unitId: UnitIdSchema,
 });
 
+export const UnitMovementRestoreChangeSchema = z.object({
+  type: z.literal("unit_movement_restore"),
+  unitId: UnitIdSchema,
+  /** Movement points to grant (replaces current value); also resets moved=false */
+  movementPoints: z.number().int().min(0),
+});
+
+export const UnitSpawnChangeSchema = z.object({
+  type: z.literal("unit_spawn"),
+  /** Unique ID for the new unit */
+  unitId: UnitIdSchema,
+  metaId: MetaIdSchema,
+  /** Player who "owns" this unit (neutral obstacles use the placing player's id) */
+  playerId: PlayerIdSchema,
+  position: PositionSchema,
+  currentHealth: z.number().int().min(1),
+  currentArmor: z.number().int().min(0),
+  movementPoints: z.number().int().min(0),
+});
+
 export const TileAttributeChangeSchema = z.object({
   type: z.literal("tile_attribute_change"),
   position: PositionSchema,
@@ -155,6 +175,8 @@ export const GameChangeSchema = z.discriminatedUnion("type", [
   UnitRiverExitChangeSchema,
   UnitPullChangeSchema,
   UnitActionsResetChangeSchema,
+  UnitMovementRestoreChangeSchema,
+  UnitSpawnChangeSchema,
   TileAttributeChangeSchema,
   TileEffectTickChangeSchema,
   TurnAdvanceChangeSchema,
@@ -172,6 +194,8 @@ export type UnitKnockbackChange = z.infer<typeof UnitKnockbackChangeSchema>;
 export type UnitRiverEnterChange = z.infer<typeof UnitRiverEnterChangeSchema>;
 export type UnitRiverExitChange = z.infer<typeof UnitRiverExitChangeSchema>;
 export type UnitActionsResetChange = z.infer<typeof UnitActionsResetChangeSchema>;
+export type UnitMovementRestoreChange = z.infer<typeof UnitMovementRestoreChangeSchema>;
+export type UnitSpawnChange = z.infer<typeof UnitSpawnChangeSchema>;
 export type TileAttributeChange = z.infer<typeof TileAttributeChangeSchema>;
 export type TileEffectTickChange = z.infer<typeof TileEffectTickChangeSchema>;
 export type TurnAdvanceChange = z.infer<typeof TurnAdvanceChangeSchema>;

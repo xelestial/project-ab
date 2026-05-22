@@ -292,9 +292,11 @@ describe("AttackResolver", () => {
     const FIRE_UNIT_B = { id: "fub", nameKey: "u", descKey: "u", class: "fighter", faction: "b",
       baseMovement: 3, baseHealth: 4, baseArmor: 0, attributes: [],
       primaryWeaponId: "wpn_fire_ranged", skillIds: [], spriteKey: "s" };
+    // Production convention: elemental weapons use attribute:"none" + explicit applyTileEffect.
+    // The fallback tile conversion only applies to tile-absorb passives.
     const FIRE_WEAPON = { id: "wpn_fire_ranged", nameKey: "w", descKey: "w",
       attackType: "ranged", rangeType: "single", minRange: 2, maxRange: 4,
-      damage: 2, attribute: "fire", penetrating: false, arcing: false };
+      damage: 2, attribute: "none", applyTileEffect: "fire", penetrating: false, arcing: false };
 
     it("applies fire effect to hit unit", () => {
       const reg = buildDataRegistry({ units: [FIRE_UNIT_A, FIRE_UNIT_B], weapons: [FIRE_WEAPON], skills: [], effects: [EFFECT_FIRE], tiles: [TILE_PLAIN, TILE_FIRE], maps: [] });

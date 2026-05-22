@@ -1,6 +1,1 @@
-[
-  { "id": "skill_shield_defend", "nameKey": "skill.shield_defend.name", "descKey": "skill.shield_defend.desc",
-    "type": "passive", "oneShot": false },
-  { "id": "skill_t2_pull", "nameKey": "skill.t2_pull.name", "descKey": "skill.t2_pull.desc",
-    "type": "active", "oneShot": true, "weaponId": "wpn_t2_pull" }
-]
+[]

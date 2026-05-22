@@ -44,12 +44,21 @@ export class TileTransitionResolver implements ITileTransitionResolver {
 
     // always_on passives: extract immunity flags
     let immuneTileEffects = false;
+    const immuneTileTypes: import("@ab/metadata").TileAttributeType[] = [];
+    const immuneEffectTypes: import("@ab/metadata").UnitEffectType[] = [];
     for (const passive of passives) {
       if (passive.trigger.type === "always_on") {
         for (const action of passive.actions) {
           if (action.type === "immune_tile_effects") immuneTileEffects = true;
+          if (action.type === "immune_tile_type") immuneTileTypes.push(...action.tileTypes);
+          if (action.type === "immune_effect") immuneEffectTypes.push(action.effectType);
         }
       }
+    }
+
+    // immune_tile_type: if the entered tile type is in the immunity list, skip all effects
+    if (immuneTileTypes.includes(tileAttr)) {
+      return changes; // fully immune to this tile type
     }
 
     // Track effective tile attr (passives may convert the entered tile)
@@ -141,9 +150,11 @@ export class TileTransitionResolver implements ITileTransitionResolver {
 
       // Apply the tile's own effect (if any)
       if (tileMeta.appliesEffectId !== undefined) {
+        const effectMeta = this.registry.getEffect(tileMeta.appliesEffectId);
+        // Check immune_effect passive for this specific effect type
+        const isEffectImmune = immuneEffectTypes.includes(effectMeta.effectType);
         const alreadyHas = unit.activeEffects.some((e) => e.effectId === tileMeta.appliesEffectId);
-        if (!alreadyHas) {
-          const effectMeta = this.registry.getEffect(tileMeta.appliesEffectId);
+        if (!isEffectImmune && !alreadyHas) {
           const turnsRemaining = effectMeta.removeConditions.find((c) => c.type === "turns")?.count;
           changes.push({
             type: "unit_effect_add",

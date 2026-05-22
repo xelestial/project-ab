@@ -4,6 +4,7 @@
 import type { GameState, Position } from "@ab/metadata";
 import type { IStateApplicator } from "../state/state-applicator.js";
 import type { IEffectResolver } from "../resolvers/effect-resolver.js";
+import type { IPassiveResolver } from "../resolvers/passive-resolver.js";
 import { getAliveUnits } from "../state/game-state-utils.js";
 
 export interface IEffectManager {
@@ -15,15 +16,29 @@ export class EffectManager implements IEffectManager {
   constructor(
     private readonly resolver: IEffectResolver,
     private readonly applicator: IStateApplicator,
+    private readonly passiveResolver?: IPassiveResolver,
   ) {}
 
   processTurnStart(unitId: string, state: GameState): GameState {
     const unit = state.units[unitId];
     if (unit === undefined || !unit.alive) return state;
 
-    const changes = this.resolver.resolveTurnTick(unit, state);
-    if (changes.length === 0) return state;
-    return this.applicator.apply(changes, state);
+    // Effect tick (damage-over-time, countdown, tile periodic damage)
+    const effectChanges = this.resolver.resolveTurnTick(unit, state);
+    let newState = effectChanges.length > 0 ? this.applicator.apply(effectChanges, state) : state;
+
+    // on_turn_start passive triggers (medic, cryo_affinity, sprinkler, turn_arson)
+    if (this.passiveResolver !== undefined) {
+      const updatedUnit = newState.units[unitId];
+      if (updatedUnit !== undefined && updatedUnit.alive) {
+        const passiveChanges = this.passiveResolver.resolveTurnStart(updatedUnit, newState);
+        if (passiveChanges.length > 0) {
+          newState = this.applicator.apply(passiveChanges, newState);
+        }
+      }
+    }
+
+    return newState;
   }
 
   processTileEntry(unitId: string, position: Position, state: GameState): GameState {

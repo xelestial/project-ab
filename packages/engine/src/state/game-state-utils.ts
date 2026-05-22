@@ -137,6 +137,11 @@ export function isFrozen(unit: UnitState): boolean {
   return hasEffect(unit, "freeze");
 }
 
+/** Returns true if the unit cannot act at all (frozen OR stunned) */
+export function isActionBlocked(unit: UnitState): boolean {
+  return hasEffect(unit, "freeze") || hasEffect(unit, "stun");
+}
+
 export function isOnFire(unit: UnitState): boolean {
   return hasEffect(unit, "fire");
 }

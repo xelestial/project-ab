@@ -18,6 +18,8 @@ import {
   orthogonalNeighbors,
   getTileAttribute,
   isFrozen,
+  isActionBlocked,
+  hasEffect,
   getUnitAt,
 } from "../state/game-state-utils.js";
 
@@ -60,9 +62,12 @@ export class MovementValidator implements IMovementValidator {
   }
 
   validateMove(unit: UnitState, destination: Position, state: GameState): MoveValidation {
-    // 1. Frozen check
+    // 1. Frozen / stunned check
     if (isFrozen(unit)) {
       return { valid: false, errorCode: ErrorCode.MOVE_FROZEN };
+    }
+    if (hasEffect(unit, "stun")) {
+      return { valid: false, errorCode: ErrorCode.MOVE_STUN };
     }
 
     // 2. Already moved check
@@ -102,7 +107,7 @@ export class MovementValidator implements IMovementValidator {
   }
 
   getReachableTiles(unit: UnitState, state: GameState): Position[] {
-    if (isFrozen(unit) || unit.actionsUsed.moved) return [];
+    if (isActionBlocked(unit) || unit.actionsUsed.moved) return [];
     return this.bfsAll(unit, state);
   }
 

@@ -35,7 +35,7 @@ function makeFullRegistry() {
     units: [
       { id: "t1", nameKey: "n", descKey: "d", class: "tanker", faction: "a",
         baseMovement: 3, baseHealth: 6, baseArmor: 1, attributes: [],
-        primaryWeaponId: "wpn_tanker_melee", skillIds: ["skill_shield_defend"], passiveIds: [], spriteKey: "s" },
+        primaryWeaponId: "wpn_tanker_melee", skillIds: ["skill_shield_defend"], passiveIds: ["passive_tile_absorb_attack"], spriteKey: "s" },
       { id: "t2", nameKey: "n", descKey: "d", class: "tanker", faction: "b",
         baseMovement: 3, baseHealth: 6, baseArmor: 1, attributes: [],
         primaryWeaponId: "wpn_tanker_melee", skillIds: ["skill_shield_defend", "skill_t2_pull"], passiveIds: [], spriteKey: "s" },
@@ -99,6 +99,14 @@ function makeFullRegistry() {
     ],
     maps: [{ id: "map_t", nameKey: "n", descKey: "d", playerCounts: [2], tileOverrides: [], spawnPoints: [] }],
     elementalReactions: [],
+    unitPassives: [
+      {
+        id: "passive_tile_absorb_attack",
+        nameKey: "n", descKey: "d",
+        trigger: { type: "on_attack" },
+        actions: [{ type: "absorb_tile_at_attacker", applyToTargetTile: true }],
+      },
+    ],
   });
 }
 

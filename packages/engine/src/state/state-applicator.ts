@@ -55,6 +55,10 @@ function applyOne(change: GameChange, state: GameState): GameState {
       return applyUnitPull(change, state);
     case "unit_actions_reset":
       return applyUnitActionsReset(change, state);
+    case "unit_movement_restore":
+      return applyUnitMovementRestore(change, state);
+    case "unit_spawn":
+      return applyUnitSpawn(change, state);
     case "tile_attribute_change":
       return applyTileAttributeChange(change, state);
     case "tile_effect_tick":
@@ -217,6 +221,48 @@ function applyUnitActionsReset(
     extinguished: false,
   };
   return updateUnit(state, change.unitId, { actionsUsed: resetActions });
+}
+
+function applyUnitMovementRestore(
+  change: Extract<GameChange, { type: "unit_movement_restore" }>,
+  state: GameState,
+): GameState {
+  const unit = state.units[change.unitId];
+  if (unit === undefined) return state;
+  return updateUnit(state, change.unitId, {
+    movementPoints: change.movementPoints,
+    actionsUsed: { ...unit.actionsUsed, moved: false },
+  });
+}
+
+function applyUnitSpawn(
+  change: Extract<GameChange, { type: "unit_spawn" }>,
+  state: GameState,
+): GameState {
+  const newUnit: UnitState = {
+    unitId: change.unitId,
+    metaId: change.metaId,
+    playerId: change.playerId,
+    position: change.position,
+    currentHealth: change.currentHealth,
+    currentArmor: change.currentArmor,
+    movementPoints: change.movementPoints,
+    activeEffects: [],
+    // Spawned obstacles cannot act on the turn they appear
+    actionsUsed: { moved: true, attacked: true, skillUsed: true, extinguished: true },
+    alive: true,
+  };
+  const newUnits = { ...state.units, [change.unitId]: newUnit };
+  const player = state.players[change.playerId];
+  if (player === undefined) return { ...state, units: newUnits };
+  return {
+    ...state,
+    units: newUnits,
+    players: {
+      ...state.players,
+      [change.playerId]: { ...player, unitIds: [...player.unitIds, change.unitId] },
+    },
+  };
 }
 
 function applyTileAttributeChange(

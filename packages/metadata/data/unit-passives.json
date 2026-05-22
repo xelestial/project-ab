@@ -1,23 +1,117 @@
 [
-  { "id": "passive_b1_fire_heal",
-    "nameKey": "passive.b1_fire_heal.name", "descKey": "passive.b1_fire_heal.desc",
+  {
+    "id": "passive_shield",
+    "nameKey": "passive.shield.name", "descKey": "passive.shield.desc",
+    "trigger": { "type": "always_on" },
+    "actions": [
+      { "type": "block_penetration" }
+    ]
+  },
+  {
+    "id": "passive_tile_absorb_attack",
+    "nameKey": "passive.tile_absorb_attack.name", "descKey": "passive.tile_absorb_attack.desc",
+    "trigger": { "type": "on_attack" },
+    "actions": [
+      { "type": "absorb_tile_at_attacker", "applyToTargetTile": true }
+    ]
+  },
+  {
+    "id": "passive_melee_mastery",
+    "nameKey": "passive.melee_mastery.name", "descKey": "passive.melee_mastery.desc",
+    "trigger": { "type": "always_on" },
+    "actions": [
+      { "type": "damage_reduction", "attackType": "melee", "amount": 1 }
+    ]
+  },
+  {
+    "id": "passive_fire_affinity",
+    "nameKey": "passive.fire_affinity.name", "descKey": "passive.fire_affinity.desc",
     "trigger": { "type": "on_tile_entry_of", "tileAttribute": "fire" },
     "actions": [
       { "type": "convert_entered_tile", "to": "plain" },
       { "type": "heal_self", "amount": 1 }
-    ] },
-  { "id": "passive_b2_tile_immunity",
-    "nameKey": "passive.b2_tile_immunity.name", "descKey": "passive.b2_tile_immunity.desc",
+    ]
+  },
+  {
+    "id": "passive_medic",
+    "nameKey": "passive.medic.name", "descKey": "passive.medic.desc",
+    "trigger": { "type": "on_turn_start" },
+    "actions": [
+      { "type": "heal_adjacent_allies", "amount": 1, "radius": 1, "excludeSelf": true }
+    ]
+  },
+  {
+    "id": "passive_agility",
+    "nameKey": "passive.agility.name", "descKey": "passive.agility.desc",
+    "trigger": { "type": "on_attack" },
+    "actions": [
+      { "type": "bonus_move", "distance": 1 }
+    ]
+  },
+  {
+    "id": "passive_turn_arson",
+    "nameKey": "passive.turn_arson.name", "descKey": "passive.turn_arson.desc",
+    "trigger": { "type": "on_turn_start", "condition": "adjacent_enemy_exists" },
+    "actions": [
+      { "type": "apply_tile_effect_to_adjacent_enemies", "effect": "fire" }
+    ]
+  },
+  {
+    "id": "passive_insulator",
+    "nameKey": "passive.insulator.name", "descKey": "passive.insulator.desc",
     "trigger": { "type": "always_on" },
     "actions": [
-      { "type": "immune_tile_effects" },
-      { "type": "immune_tile_damage" },
-      { "type": "immune_elemental_effects" }
-    ] },
-  { "id": "passive_b2_tile_spread",
-    "nameKey": "passive.b2_tile_spread.name", "descKey": "passive.b2_tile_spread.desc",
-    "trigger": { "type": "on_tile_entry_any_attribute" },
+      { "type": "immune_damage_type", "damageType": "electric" },
+      { "type": "block_chain_conductor" }
+    ]
+  },
+  {
+    "id": "passive_generator",
+    "nameKey": "passive.generator.name", "descKey": "passive.generator.desc",
+    "trigger": { "type": "always_on" },
     "actions": [
-      { "type": "spread_entered_tile_attr" }
-    ] }
+      { "type": "amplify_damage_type", "damageType": "electric", "multiplier": 2, "radius": 2, "radiusDiagonalCost": 2 }
+    ]
+  },
+  {
+    "id": "passive_freeze_immunity",
+    "nameKey": "passive.freeze_immunity.name", "descKey": "passive.freeze_immunity.desc",
+    "trigger": { "type": "always_on" },
+    "actions": [
+      { "type": "immune_effect", "effectType": "freeze" }
+    ]
+  },
+  {
+    "id": "passive_amphibious",
+    "nameKey": "passive.amphibious.name", "descKey": "passive.amphibious.desc",
+    "trigger": { "type": "always_on" },
+    "actions": [
+      { "type": "immune_tile_type", "tileTypes": ["water", "river"] }
+    ]
+  },
+  {
+    "id": "passive_fire_weakness",
+    "nameKey": "passive.fire_weakness.name", "descKey": "passive.fire_weakness.desc",
+    "trigger": { "type": "always_on" },
+    "actions": [
+      { "type": "vulnerability", "damageType": "fire", "extraDamage": 1 }
+    ]
+  },
+  {
+    "id": "passive_cryo_affinity",
+    "nameKey": "passive.cryo_affinity.name", "descKey": "passive.cryo_affinity.desc",
+    "trigger": { "type": "on_turn_start", "condition": "adjacent_frozen_enemy_exists" },
+    "actions": [
+      { "type": "heal_self_per", "amount": 1, "perCondition": "adjacent_frozen_enemy" }
+    ]
+  },
+  {
+    "id": "passive_sprinkler",
+    "nameKey": "passive.sprinkler.name", "descKey": "passive.sprinkler.desc",
+    "trigger": { "type": "on_turn_start" },
+    "actions": [
+      { "type": "remove_adjacent_tile_effect", "effect": "fire", "radius": 1 },
+      { "type": "remove_adjacent_unit_effect", "effectType": "fire", "radius": 1 }
+    ]
+  }
 ]

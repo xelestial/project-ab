@@ -33,20 +33,20 @@ export type GamePhase = z.infer<typeof GamePhaseSchema>;
 export const ActionTypeSchema = z.enum(["move", "attack", "skill", "extinguish", "pass", "draft_place"]);
 export type ActionType = z.infer<typeof ActionTypeSchema>;
 
-export const AttackTypeSchema = z.enum(["melee", "ranged", "artillery"]);
+export const AttackTypeSchema = z.enum(["melee", "ranged", "artillery", "special"]);
 export type AttackType = z.infer<typeof AttackTypeSchema>;
 
-export const RangeTypeSchema = z.enum(["single", "line", "area", "penetrate", "beam"]);
+export const RangeTypeSchema = z.enum(["single", "line", "area", "penetrate", "beam", "arc", "special"]);
 export type RangeType = z.infer<typeof RangeTypeSchema>;
 
 export const AttackAttributeSchema = z.enum(["fire", "water", "acid", "electric", "ice", "sand", "none"]);
 export type AttackAttribute = z.infer<typeof AttackAttributeSchema>;
 
-export const UnitClassSchema = z.enum(["tanker", "fighter", "ranger", "mage", "support", "brute"]);
+export const UnitClassSchema = z.enum(["tanker", "fighter", "ranger", "mage", "support", "brute", "artillery", "utility", "obstacle"]);
 export type UnitClass = z.infer<typeof UnitClassSchema>;
 
 /** Unit-based status effects */
-export const UnitEffectTypeSchema = z.enum(["freeze", "fire", "acid", "water", "sand", "electric"]);
+export const UnitEffectTypeSchema = z.enum(["freeze", "fire", "acid", "water", "sand", "electric", "stun", "confused"]);
 export type UnitEffectType = z.infer<typeof UnitEffectTypeSchema>;
 
 /** Tile attribute (what a tile currently "is") */

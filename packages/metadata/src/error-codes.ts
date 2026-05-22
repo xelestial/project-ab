@@ -11,6 +11,7 @@ export const ErrorCode = {
   MOVE_INSUFFICIENT_MP: "error.move.insufficient_mp",
   MOVE_ALREADY_MOVED: "error.move.already_moved",
   MOVE_FROZEN: "error.move.frozen",
+  MOVE_STUN: "error.move.stun",
   MOVE_NO_PATH: "error.move.no_path",
 
   // Attack
@@ -18,6 +19,8 @@ export const ErrorCode = {
   ATTACK_NO_LOS: "error.attack.no_los",
   ATTACK_ALREADY_ATTACKED: "error.attack.already_attacked",
   ATTACK_FROZEN: "error.attack.frozen",
+  ATTACK_STUN: "error.attack.stun",
+  ATTACK_CONFUSED: "error.attack.confused",
   ATTACK_INVALID_TARGET: "error.attack.invalid_target",
   ATTACK_RUSH_BLOCKED: "error.attack.rush_blocked",
   ATTACK_PULL_BLOCKED: "error.attack.pull_blocked",
