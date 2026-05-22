@@ -749,7 +749,9 @@ export async function registerRoutes(
       // Unit metadata + weapon stats
       try {
         const unitMeta = registry.getUnit(unit.metaId);
-        const weapon = registry.getWeapon(unitMeta.primaryWeaponId);
+        const weapon = unitMeta.primaryWeaponId !== undefined
+          ? registry.getWeapon(unitMeta.primaryWeaponId)
+          : undefined;
 
         const canSkill = !unit.actionsUsed.skillUsed && !unit.actionsUsed.attacked;
 
@@ -799,14 +801,14 @@ export async function registerRoutes(
             baseMovement: unitMeta.baseMovement,
             activeEffects: unit.activeEffects,
             actionsUsed: unit.actionsUsed,
-            weapon: {
+            weapon: weapon !== undefined ? {
               name: weapon.nameKey,
               damage: weapon.damage,
               minRange: weapon.minRange,
               maxRange: weapon.maxRange,
               attackType: weapon.attackType,
               attribute: weapon.attribute,
-            },
+            } : null,
             skills,
           },
         });

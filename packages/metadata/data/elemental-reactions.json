@@ -29,11 +29,13 @@
     "attackAttr": "ice",
     "targetEffect": "none",
     "damageMultiplier": 1,
+    "removedEffects": [],
     "appliesEffectId": "effect_freeze"
   },
   {
     "attackAttr": "ice",
     "targetEffect": "water",
+    "damageMultiplier": 1,
     "fixedDamage": 2,
     "removedEffects": ["water"],
     "appliesEffectId": "effect_freeze"
