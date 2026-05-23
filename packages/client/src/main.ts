@@ -96,6 +96,7 @@ let availableUnits: UnitMeta[] = [];
 // Placement state
 let selectedMetaId: string | null = null;
 let placedUnits: PlacedUnit[] = [];
+let selectedUnitTab: string = "tanker";
 /** playerId → metaIds they currently have placed/selected (received via WS) */
 let teammateSelections: Record<string, string[]> = {};
 let lastGameState: GameStateSnapshot | null = null;
@@ -149,6 +150,14 @@ const UNIT_COLOR: Record<string, string> = {
   brute: "#c97a2a", artillery: "#d9c83c", utility: "#3cd9d9",
   mage: "#9b5bd9", support: "#d9c05b",
 };
+
+const UNIT_CLASS_KO: Record<string, string> = {
+  tanker: "탱커", fighter: "파이터", ranger: "레인저",
+  brute: "브루트", artillery: "아틸러리", utility: "유틸리티",
+};
+
+// Class display order for tabs
+const UNIT_CLASS_ORDER = ["tanker", "fighter", "ranger", "brute", "artillery", "utility"];
 
 const UNIT_EMOJI: Record<string, string> = {
   t1: "🛡️", t2: "🛡️", f1: "⚔️", f2: "⚔️",
@@ -571,7 +580,6 @@ function spritePath(metaId: string, direction: "front-left" | "front-right" | "b
     "b1","b2","b3","b4",
     "a1","a2","a3","a4",
     "u1","u2","u3","u4",
-    "obstacle_electric_pylon",
   ]);
   if (!SPRITE_UNITS.has(metaId)) return null;
   return `/sprites/units/${metaId}-${direction}.png`;
@@ -586,7 +594,6 @@ function portraitPath(metaId: string): string | null {
     "b1","b2","b3","b4",
     "a1","a2","a3","a4",
     "u1","u2","u3","u4",
-    "obstacle_electric_pylon",
   ]);
   if (!PORTRAIT_UNITS.has(metaId)) return null;
   return `/sprites/portraits/${metaId}.png`;
@@ -686,8 +693,8 @@ function drawUnit(
   const path = metaId !== undefined ? spritePath(metaId, direction) : null;
   const spriteImg = path !== null ? loadSprite(path) : null;
 
-  // Feet anchored at front vertex of tile top face (sx, sy + HH*2)
-  const feetY = sy + HH * 2;
+  // Feet anchored at the center of the tile top face for centering on tile
+  const feetY = sy + HH;
 
   // ── Selection ring at feet (drawn before sprite so sprite sits on top) ───
   if (selectionColor && !dead) {
@@ -938,7 +945,7 @@ function renderIso(canvas: HTMLCanvasElement, opts: RenderOpts): void {
     placedByPos.set(`${pu.position.row},${pu.position.col}`, pu.metaId);
   }
 
-  // Badge collector for second-pass overlap-resolved rendering
+  // Badge collector for badge-pass rendering
   const badgeList: BadgeSpec[] = [];
 
   // Draw order: back-to-front (row+col ascending)
@@ -952,6 +959,7 @@ function renderIso(canvas: HTMLCanvasElement, opts: RenderOpts): void {
 
   const half = Math.floor(gridSize / 2);
 
+  // ── Pass 1: Draw all tiles and highlights (no units) ─────────────────────────
   for (const { row, col } of cells) {
     const key = `${row},${col}`;
     const tileAttr = tiles[key]?.attribute ?? baseTile;
@@ -1050,25 +1058,29 @@ function renderIso(canvas: HTMLCanvasElement, opts: RenderOpts): void {
       ctx.lineWidth = 3;
       ctx.stroke();
     }
+  }
 
-    // Draw placed unit (placement phase) — no badge collector needed (solo units)
+  // ── Pass 2: Draw all units back-to-front (sprites always on top of tiles) ───
+  for (const { row, col } of cells) {
+    const key = `${row},${col}`;
+    const { sx, sy } = gridToScreen(row, col, p.cx, p.cy, p.HW, p.HH);
+
+    // Draw placed unit (placement phase)
     const placedMetaId = placedByPos.get(key);
     if (placedMetaId !== undefined) {
       drawUnit(ctx, sx, sy, p.HW, p.HH, p.DEPTH, "#888", UNIT_ABBR[placedMetaId] ?? "??", false, placedMetaId, "front-left", UNIT_NAME_KO[placedMetaId] ?? placedMetaId);
     }
 
-    // Draw actual game unit (collect badge for second pass)
+    // Draw actual game unit (collect badge for badge pass)
     const unit = unitsByPos.get(key);
     if (unit !== undefined) {
       const pIdx = playerIds.indexOf(unit.playerId);
       const color = PLAYER_COLORS[pIdx >= 0 ? pIdx : 0]!;
       const abbr = UNIT_ABBR[unit.metaId] ?? unit.metaId.slice(0, 2).toUpperCase();
-      // Face the nearest enemy; fall back to team-based default if no enemies alive
       const enemyPos = nearestEnemy(unit, units);
       const dir = enemyPos
         ? directionToward(unit.position, enemyPos)
         : (pIdx === 0 ? "front-right" : "front-left");
-      // Selection outline — team color ring+glow when this unit is selected
       const selectionColor = (opts.selectedUnitId && unit.unitId === opts.selectedUnitId)
         ? color
         : undefined;
@@ -1076,7 +1088,7 @@ function renderIso(canvas: HTMLCanvasElement, opts: RenderOpts): void {
     }
   }
 
-  // Second pass: draw all unit badges with overlap resolution
+  // ── Pass 3: Draw all unit badges with overlap resolution ─────────────────────
   drawBadges(ctx, badgeList);
 }
 
@@ -1550,57 +1562,85 @@ function broadcastPlacementUpdate(): void {
 function renderUnitCards(maxUnits: number): void {
   const list = document.getElementById("unit-card-list");
   if (!list) return;
-  list.innerHTML = "<h3>유닛 선택</h3>";
+
+  // Filter out non-playable units (obstacles etc.)
+  const playableUnits = availableUnits.filter(u => UNIT_CLASS_KO[u.class] !== undefined);
+
+  // Collect classes present in available units, in display order
+  const presentClasses = UNIT_CLASS_ORDER.filter(cls =>
+    playableUnits.some(u => u.class === cls)
+  );
+
+  // Default to first available class if current tab has no units
+  if (!presentClasses.includes(selectedUnitTab) && presentClasses.length > 0) {
+    selectedUnitTab = presentClasses[0]!;
+  }
 
   const lockedByTeammate = getTeammateLockedMetaIds();
 
-  for (const unit of availableUnits) {
+  // Build HTML
+  const tabsHtml = presentClasses.map(cls => {
+    const color = UNIT_COLOR[cls] ?? "#888";
+    const isActive = cls === selectedUnitTab;
+    const usedCount = playableUnits.filter(u => u.class === cls && placedUnits.some(p => p.metaId === u.id)).length;
+    const totalCount = playableUnits.filter(u => u.class === cls).length;
+    return `<button class="unit-tab-btn ${isActive ? "active" : ""}" data-class="${cls}"
+      style="--tab-color:${color}">${UNIT_CLASS_KO[cls]}${usedCount > 0 ? `<span class="tab-used">${usedCount}/${totalCount}</span>` : ""}</button>`;
+  }).join("");
+
+  const tabUnits = playableUnits.filter(u => u.class === selectedUnitTab);
+
+  const cardsHtml = tabUnits.map(unit => {
     const abbr = UNIT_ABBR[unit.id] ?? unit.id.toUpperCase().slice(0, 2);
     const name = UNIT_NAME_KO[unit.id] ?? unit.id;
     const isUsed = placedUnits.some((p) => p.metaId === unit.id);
     const isSelected = selectedMetaId === unit.id;
     const isTakenByTeammate = !isUsed && lockedByTeammate.has(unit.id);
     const color = UNIT_COLOR[unit.class] ?? "#888";
-
-    const card = document.createElement("div");
-    card.className = [
-      "unit-card",
-      isSelected ? "selected" : "",
-      isUsed ? "used" : "",
-      isTakenByTeammate ? "teammate-taken" : "",
-    ].filter(Boolean).join(" ");
-    card.dataset["metaId"] = unit.id;
-
-    if (isTakenByTeammate) {
-      const takenBy = lockedByWhom(unit.id);
-      card.title = `팀원(${takenBy?.slice(0, 8) ?? "??"})이 선택 중`;
-    }
-
     const portrait = portraitPath(unit.id);
     const portraitHtml = portrait !== null
-      ? `<div class="unit-portrait"><img src="${portrait}" alt="${name}" /></div>`
-      : `<div class="unit-abbr" style="background:${color};border-color:${color}">${abbr}</div>`;
-
-    const takenBadge = isTakenByTeammate
-      ? `<div class="teammate-taken-badge">팀원 선택 중</div>`
-      : "";
-
-    card.innerHTML = `
+      ? `<div class="uc-portrait"><img src="${portrait}" alt="${name}" /></div>`
+      : `<div class="uc-abbr" style="background:${color}">${abbr}</div>`;
+    const takenTitle = isTakenByTeammate ? ` title="팀원이 선택 중"` : "";
+    const stateClass = [isSelected ? "selected" : "", isUsed ? "used" : "", isTakenByTeammate ? "teammate-taken" : ""].filter(Boolean).join(" ");
+    return `<div class="unit-card ${stateClass}" data-meta-id="${unit.id}"${takenTitle}>
       ${portraitHtml}
-      <div class="unit-info">
-        <div class="unit-name">${name}</div>
-        <div class="unit-stats">HP ${unit.baseHealth} · MOV ${unit.baseMovement} · ARM ${unit.baseArmor}</div>
-        ${takenBadge}
-      </div>
-    `;
+      <div class="uc-name">${name}</div>
+      <div class="uc-stats">HP ${unit.baseHealth} · MOV ${unit.baseMovement}</div>
+      <div class="uc-stats">ARM ${unit.baseArmor}</div>
+      ${isTakenByTeammate ? `<div class="uc-taken">팀원선택중</div>` : ""}
+      ${isUsed ? `<div class="uc-placed">배치완료</div>` : ""}
+    </div>`;
+  }).join("");
+
+  list.innerHTML = `
+    <div class="unit-tabs">${tabsHtml}</div>
+    <div class="unit-card-grid">${cardsHtml}</div>
+  `;
+
+  // Tab click handlers
+  list.querySelectorAll<HTMLButtonElement>(".unit-tab-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      selectedUnitTab = btn.dataset["class"] ?? selectedUnitTab;
+      renderUnitCards(maxUnits);
+    });
+  });
+
+  // Card click handlers
+  list.querySelectorAll<HTMLDivElement>(".unit-card").forEach(card => {
+    const metaId = card.dataset["metaId"];
+    if (!metaId) return;
+    const unit = playableUnits.find(u => u.id === metaId);
+    if (!unit) return;
+    const isUsed = placedUnits.some((p) => p.metaId === metaId);
+    const isTakenByTeammate = !isUsed && lockedByTeammate.has(metaId);
     card.addEventListener("click", () => {
-      if (isUsed || isTakenByTeammate) return; // block selection of teammate's unit
-      selectedMetaId = selectedMetaId === unit.id ? null : unit.id;
+      if (isUsed || isTakenByTeammate) return;
+      selectedMetaId = selectedMetaId === metaId ? null : metaId;
       renderUnitCards(maxUnits);
       broadcastPlacementUpdate();
     });
-    list.appendChild(card);
-  }
+  });
 }
 
 let placementGridSize = 11;
