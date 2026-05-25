@@ -105,9 +105,11 @@ export class GameLoop implements IGameLoop {
       );
       state = { ...state, turnOrder };
 
-      // Round start
-      this.eventBus.emit({ type: "round.start", round: state.round, state });
+      // Round start — startRound 먼저 호출해 currentTurnIndex=0 리셋 후 이벤트 발화.
+      // 순서가 반대이면 round.start 이벤트가 전 라운드의 stale currentTurnIndex를
+      // 새 turnOrder와 함께 담아 내보내 구독자에게 inconsistent state가 노출된다.
       state = this.roundManager.startRound(state);
+      this.eventBus.emit({ type: "round.start", round: state.round, state });
 
       // Turn loop
       while (!this.turnManager.isRoundOver(state)) {

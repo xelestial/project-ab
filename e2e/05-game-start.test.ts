@@ -33,7 +33,9 @@ test.describe("배치 완료 → 게임 화면", () => {
     await page.locator("#menu-grid .mode-card").first().click();
     await page.waitForSelector("#screen-lobby.active");
     await page.locator("#start-btn").click();
-    await page.waitForSelector("#screen-placement.active", { timeout: 10000 });
+    await page.waitForSelector("#screen-waiting-room.active", { timeout: 10_000 });
+    await page.locator("#wr-ready-btn").click();
+    await page.waitForSelector("#screen-placement.active", { timeout: 20_000 });
   });
 
   test("유닛 카드가 렌더링된다 (최소 1개)", async ({ page }) => {

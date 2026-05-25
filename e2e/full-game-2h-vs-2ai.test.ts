@@ -78,6 +78,8 @@ test.beforeAll(() => {
 // ─── MAIN TEST ───────────────────────────────────────────────────────────────
 
 test("2인간 vs 2AI — 대기실 → 배치 → 전투 전체 1게임", async () => {
+  test.setTimeout(120_000);
+
   // ── 1. API 게임 설정 ─────────────────────────────────────────────────────
   console.log("\n═══ STEP 1: API 게임 설정 ═══");
 
@@ -329,6 +331,7 @@ test("2인간 vs 2AI — 대기실 → 배치 → 전투 전체 1게임", async 
   console.log("\n═══ STEP 9: 유닛 순서 지정 처리 ═══");
 
   const handleUnitOrder = async (page: Page, label: string) => {
+    // 유닛 순서 전용 화면 처리
     const isOrder = await page.evaluate(
       () => document.getElementById("screen-unit-order")?.classList.contains("active"),
     );
@@ -338,9 +341,12 @@ test("2인간 vs 2AI — 대기실 → 배치 → 전투 전체 1게임", async 
       await page.waitForTimeout(1000);
     }
 
-    // Also handle the unit-order overlay if visible
+    // 유닛 순서 오버레이 처리 (hidden 클래스가 없을 때 = visible)
     const overlayVisible = await page.evaluate(
-      () => !document.getElementById("unit-order-overlay")?.classList.contains("hidden"),
+      () => {
+        const el = document.getElementById("unit-order-overlay");
+        return el !== null && !el.classList.contains("hidden");
+      },
     );
     if (overlayVisible) {
       console.log(`${label} 유닛 순서 오버레이 — 제출`);
