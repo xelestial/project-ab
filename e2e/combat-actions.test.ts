@@ -232,15 +232,12 @@ test("전투 행동 v4: 무기1/2 UI + 액티브스킬 + r1 API기반 원거리 
     return true;
   };
 
-  // ── 3. 워밍업: 6턴 패스 (2 라운드 → AI 서서히 접근, 아직 안전 거리) ──
-  console.log("\n═══ 워밍업: 6턴 패스 (AI 접근 유도) ═══");
-  for (let p = 1; p <= 6; p++) {
-    const ok = await waitMyTurn(`warmup-${p}`);
-    if (!ok) { console.log(`⚠️ warmup pass ${p}: 내 턴 없음`); break; }
-    await page.click("#pass-btn");
-    await page.waitForTimeout(300);
-    if (p % 3 === 0) console.log(`  ${p}턴 패스 완료 (라운드 ~${Math.ceil(p/3)})`);
-  }
+  // ── 3. 테스트 루프 (워밍업 없이 즉시 시작) ──────────────────────────────
+  // 워밍업을 제거한 이유:
+  //  - 워밍업 패스 동안 AI가 플레이어 유닛을 공격해 HP 소모
+  //  - 테스트 루프에서 b1/t1 차례가 오기 전에 게임이 끝날 수 있음
+  //  - r1이 30 이터레이션 안에 충분히 AI 사거리에 도달 가능
+  console.log("\n═══ 전투 테스트 루프 시작 (워밍업 없음) ═══");
 
   // ── 4. 턴 인식 테스트 루프 ─────────────────────────────────────────────
   console.log("\n═══ 턴 인식 테스트 시작 ═══");
@@ -304,25 +301,9 @@ test("전투 행동 v4: 무기1/2 UI + 액티브스킬 + r1 API기반 원거리 
         results.b1WeaponSwitch = true; // mark as done regardless
       }
 
-      // b1 turn: b1이 이미 선택됨 — 인접 AI 있으면 공격, 없으면 패스
-      const aiUnits = Object.values(st.units).filter(u => u.alive && u.playerId !== PLAYER_ID);
-      const adjAI = aiUnits.find(ai => {
-        const { row: ar, col: ac } = ai.position;
-        if (!pos) return false;
-        const sameRowOrCol = (ar === pos.row || ac === pos.col);
-        const dist = ar === pos.row ? Math.abs(ac - pos.col) : Math.abs(ar - pos.row);
-        return sameRowOrCol && dist === 1;
-      });
-
-      if (adjAI) {
-        console.log(`    b1 근접 공격: AI ${adjAI.metaId}@(${adjAI.position.row},${adjAI.position.col})`);
-        await clickTile(adjAI.position.row, adjAI.position.col, gs);
-        await page.waitForTimeout(800);
-        await page.screenshot({ path: SS("02-b1-melee-attack") });
-      } else {
-        console.log("    b1 패스 (인접 AI 없음)");
-        await page.click("#pass-btn");
-      }
+      // b1 턴: UI 테스트 완료 후 항상 패스 (공격하면 AI 조기 사망 → 게임 종료 위험)
+      console.log("    b1 패스 (AI 생존 유지)");
+      await page.click("#pass-btn");
       await page.waitForTimeout(400);
 
     } else if (metaId === "t1" && !results.t1SkillActivated) {
