@@ -132,7 +132,8 @@ test("전투 행동 v4: 무기1/2 UI + 액티브스킬 + r1 API기반 원거리 
   console.log(`\n게임 생성: ${gameId}`);
 
   await apiPost(`/api/v1/rooms/${gameId}/join`, token, { playerId: PLAYER_ID });
-  await apiPost(`/api/v1/rooms/${gameId}/ai`, token, {});
+  // iterations=1: AI 결정을 최소화하여 MCTS 기본값(200반복×1초)으로 인한 28초+ 지연 방지
+  await apiPost(`/api/v1/rooms/${gameId}/ai`, token, { iterations: 1 });
 
   // b1(무기2), t1(액티브스킬), r1(원거리) 배치
   const placeRes = await apiPost(`/api/v1/rooms/${gameId}/place`, token, {
