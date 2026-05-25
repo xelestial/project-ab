@@ -32,7 +32,7 @@ import { MemoryReplayStore } from "../session/replay-store.js";
 import type { ITokenStore } from "../auth/token-store.js";
 import { MemoryTokenStore } from "../auth/token-store.js";
 import { createToken, verifyToken, requireAuth } from "../auth/jwt-auth.js";
-import { MCTSAdapter } from "@ab/ai";
+import { MCTSAdapter, TacticalAdapter } from "@ab/ai";
 import { MatchmakingQueue } from "../session/matchmaking.js";
 import { tryStartGame, generateAiPlacement } from "../session/game-starter.js";
 import { PassThroughAdapter } from "../ws/passthrough-adapter.js";
@@ -57,10 +57,16 @@ const RefreshBodySchema = z.object({
 });
 
 const AddAiBodySchema = z.object({
-  /** AI difficulty: number of MCTS iterations (default: 200) */
+  /** AI difficulty: number of MCTS iterations (default: 200). MCTS 전용. */
   iterations: z.number().int().min(1).max(2000).optional(),
-  /** Per-turn time budget in ms (default: 1000) */
+  /** Per-turn time budget in ms (default: 1000). MCTS 전용. */
   timeoutMs: z.number().int().min(100).max(10_000).optional(),
+  /**
+   * Tactical AI 가중치 프로파일.
+   * 지정하면 TacticalAdapter 사용; 미지정 시 MCTSAdapter 사용.
+   * 값: "aggressive" | "defensive" | "balanced" | "test"
+   */
+  profile: z.enum(["aggressive", "defensive", "balanced", "test"]).optional(),
 });
 
 const MatchmakingJoinSchema = z.object({
@@ -389,17 +395,25 @@ export async function registerRoutes(
       const aiPlayerId = `ai_${Date.now()}` as PlayerId;
       const { movementValidator, attackValidator, actionProcessor } = session.context;
 
-      const mctsOptions = {
-        ...(body.data.iterations !== undefined ? { iterations: body.data.iterations } : {}),
-        ...(body.data.timeoutMs !== undefined ? { timeoutMs: body.data.timeoutMs } : {}),
-      };
-      const adapter = new MCTSAdapter(
-        aiPlayerId,
-        movementValidator,
-        attackValidator,
-        actionProcessor,
-        mctsOptions,
-      );
+      // profile이 지정되면 TacticalAdapter, 아니면 기존 MCTSAdapter 사용
+      const adapter = body.data.profile !== undefined
+        ? new TacticalAdapter(
+            aiPlayerId,
+            movementValidator,
+            attackValidator,
+            registry,
+            { profile: body.data.profile },
+          )
+        : new MCTSAdapter(
+            aiPlayerId,
+            movementValidator,
+            attackValidator,
+            actionProcessor,
+            {
+              ...(body.data.iterations !== undefined ? { iterations: body.data.iterations } : {}),
+              ...(body.data.timeoutMs !== undefined ? { timeoutMs: body.data.timeoutMs } : {}),
+            },
+          );
 
       // Determine teamIndex: use map's teamSize to assign teams correctly
       const mapMeta = registry.getMap(session.state.map.mapId);
