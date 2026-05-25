@@ -126,13 +126,17 @@ export class ActionProcessor implements IActionProcessor {
       return { accepted: false, errorCode: ErrorCode.ATTACK_ALREADY_ATTACKED, newState: state, changes: [] };
     }
 
-    const attackOpts = action.sourceTile !== undefined ? { sourceTile: action.sourceTile } : undefined;
-    const validation = this.attackValidator.validateAttack(unit, action.target, state, attackOpts);
+    const attackOpts = {
+      ...(action.sourceTile !== undefined ? { sourceTile: action.sourceTile } : {}),
+      ...(action.weaponId !== undefined ? { overrideWeaponId: action.weaponId as string } : {}),
+    };
+    const attackOptsOrUndef = Object.keys(attackOpts).length > 0 ? attackOpts : undefined;
+    const validation = this.attackValidator.validateAttack(unit, action.target, state, attackOptsOrUndef);
     if (!validation.valid) {
       return { accepted: false, errorCode: validation.errorCode, newState: state, changes: [] };
     }
 
-    const changes = this.attackResolver.resolve(unit, action.target, state, attackOpts);
+    const changes = this.attackResolver.resolve(unit, action.target, state, attackOptsOrUndef);
     let newState = this.applicator.apply(changes, state);
 
     // Mark as attacked

@@ -43,6 +43,7 @@ type WsMessage =
   | { type: "game_end"; gameId: string; winnerIds: string[]; reason: string }
   | { type: "request_unit_order"; gameId: string; aliveUnitIds: string[]; timeoutMs: number }
   | { type: "placement_selections"; gameId: string; selections: Record<string, string[]> }
+  | { type: "room_status"; gameId: string; players: Array<{ playerId: string; ready: boolean; isAi: boolean; teamIndex: number }>; expectedPlayerCount: number; allReady: boolean }
   | { type: "error"; code: string; message: string }
   | { type: "pong" };
 
@@ -52,6 +53,14 @@ export type UnitOrderRequestHandler = (aliveUnitIds: string[], timeoutMs: number
 /** playerId → list of metaIds currently selected/placed by that player */
 export type PlacementSelectionsHandler = (selections: Record<string, string[]>) => void;
 
+export type RoomStatusData = {
+  gameId: string;
+  players: Array<{ playerId: string; ready: boolean; isAi: boolean; teamIndex: number }>;
+  expectedPlayerCount: number;
+  allReady: boolean;
+};
+export type RoomStatusHandler = (data: RoomStatusData) => void;
+
 export class WsClient {
   private ws: WebSocket | null = null;
   private gameId: string | null = null;
@@ -60,6 +69,7 @@ export class WsClient {
   private onJoined: (() => void) | null = null;
   private onUnitOrderRequest: UnitOrderRequestHandler | null = null;
   private onPlacementSelections: PlacementSelectionsHandler | null = null;
+  private onRoomStatus: RoomStatusHandler | null = null;
   private pingInterval: ReturnType<typeof setInterval> | null = null;
 
   connect(
@@ -72,6 +82,7 @@ export class WsClient {
       onGameEnd?: GameEndHandler;
       onUnitOrderRequest?: UnitOrderRequestHandler;
       onPlacementSelections?: PlacementSelectionsHandler;
+      onRoomStatus?: RoomStatusHandler;
       token?: string;
     },
   ): void {
@@ -81,6 +92,7 @@ export class WsClient {
     this.onGameEnd = handlers.onGameEnd ?? null;
     this.onUnitOrderRequest = handlers.onUnitOrderRequest ?? null;
     this.onPlacementSelections = handlers.onPlacementSelections ?? null;
+    this.onRoomStatus = handlers.onRoomStatus ?? null;
 
     this.ws = new WebSocket(`${wsBaseUrl}/ws/game/${gameId}`);
 
@@ -120,6 +132,9 @@ export class WsClient {
         case "placement_selections":
           this.onPlacementSelections?.(msg.selections as Record<string, string[]>);
           break;
+        case "room_status":
+          this.onRoomStatus?.(msg as RoomStatusData);
+          break;
       }
     };
 
@@ -143,6 +158,10 @@ export class WsClient {
    */
   sendPlacementUpdate(gameId: string, playerId: string, metaIds: string[]): void {
     this.send({ type: "placement_update", gameId, playerId, metaIds });
+  }
+
+  sendSetReady(gameId: string, playerId: string, ready: boolean): void {
+    this.send({ type: "set_ready", gameId, playerId, ready });
   }
 
   get connected(): boolean {

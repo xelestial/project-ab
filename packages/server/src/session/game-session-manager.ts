@@ -37,6 +37,16 @@ export interface GameSession {
    * Broadcast to teammates in real-time; not persisted to the store.
    */
   selectionMap: Map<string, string[]>;
+  /** Players who clicked "ready" in the waiting room */
+  readySet: Set<string>;
+  /** AI player IDs (auto-ready) */
+  aiPlayerIds: Set<string>;
+  /**
+   * Per-unit undo data for the current turn's move action.
+   * Cleared when the unit attacks or passes.
+   * Key = unitId, value = state before the move.
+   */
+  pendingMoveUndos: Map<string, { from: import("@ab/metadata").Position; movementPoints: number }>;
 }
 
 export class GameSessionManager {
@@ -66,6 +76,9 @@ export class GameSessionManager {
       expectedPlayerCount,
       placements: new Map(),
       selectionMap: new Map(),
+      readySet: new Set(),
+      aiPlayerIds: new Set(),
+      pendingMoveUndos: new Map(),
     };
     this.sessions.set(gameId, session);
 
@@ -114,6 +127,9 @@ export class GameSessionManager {
       expectedPlayerCount: record.expectedPlayerCount,
       placements,
       selectionMap: new Map(),
+      readySet: new Set(),
+      aiPlayerIds: new Set(),
+      pendingMoveUndos: new Map(),
     };
     this.sessions.set(gameId, session);
     return session;
@@ -121,6 +137,10 @@ export class GameSessionManager {
 
   getSession(gameId: string): GameSession | undefined {
     return this.sessions.get(gameId);
+  }
+
+  addAiPlayer(gameId: string, aiPlayerId: string): void {
+    this.sessions.get(gameId)?.aiPlayerIds.add(aiPlayerId);
   }
 
   addAdapter(gameId: string, adapter: IPlayerAdapter): boolean {

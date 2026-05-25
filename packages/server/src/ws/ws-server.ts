@@ -19,6 +19,32 @@ import { PassThroughAdapter } from "./passthrough-adapter.js";
 import { decodeMessage, encodeMessage } from "./ws-protocol.js";
 import { getText } from "@ab/metadata";
 import { tryStartGame } from "../session/game-starter.js";
+import type { GameSession } from "../session/game-session-manager.js";
+
+function buildAndBroadcastRoomStatus(session: GameSession, gameId: string): void {
+  const humanCount = session.expectedPlayerCount - session.aiPlayerIds.size;
+  const allReady = humanCount > 0 && session.readySet.size >= humanCount;
+
+  const players = Object.entries(session.state.players).map(([pid, pState]) => ({
+    playerId: pid,
+    ready: session.aiPlayerIds.has(pid) || session.readySet.has(pid),
+    isAi: session.aiPlayerIds.has(pid),
+    teamIndex: (pState as { teamIndex: number }).teamIndex,
+  }));
+
+  const msg = encodeMessage({
+    type: "room_status",
+    gameId,
+    players,
+    expectedPlayerCount: session.expectedPlayerCount,
+    allReady,
+  });
+
+  for (const adp of session.adapters.values()) {
+    const adpWithRaw = adp as { sendRaw?: (payload: string) => void };
+    try { adpWithRaw.sendRaw?.(msg); } catch { /* closed */ }
+  }
+}
 
 export async function registerWsRoutes(
   fastify: FastifyInstance,
@@ -152,6 +178,27 @@ export async function registerWsRoutes(
           // (Human player's placement is submitted via POST /place; this covers
           //  the edge case where placement arrives before the WS adapter registers)
           tryStartGame(session, factory, registry, statsStore, fastify.log, replayStore);
+
+          // Send current room status snapshot to the newly (re)joined player
+          if (session.status === "waiting") {
+            buildAndBroadcastRoomStatus(session, msg.gameId);
+          }
+
+          // Send current selectionMap snapshot to the newly (re)connected player
+          // so they immediately see what teammates have already selected.
+          if (session.status === "waiting" && session.selectionMap.size > 0) {
+            const selections: Record<string, string[]> = {};
+            for (const [pid, metaIds] of session.selectionMap) {
+              selections[pid] = metaIds;
+            }
+            const snapMsg = encodeMessage({
+              type: "placement_selections",
+              gameId: msg.gameId,
+              selections,
+            });
+            const adpWithRaw = adapter as { sendRaw?: (payload: string) => void } | undefined;
+            try { adpWithRaw?.sendRaw?.(snapMsg); } catch { /* socket may be closed */ }
+          }
         }
 
         if (msg.type === "spectate") {
@@ -261,11 +308,46 @@ export async function registerWsRoutes(
             try { adpWithRaw.sendRaw?.(broadcastMsg); } catch { /* socket may be closed */ }
           }
         }
+
+        if (msg.type === "set_ready") {
+          const session = sessionManager.getSession(msg.gameId);
+          if (session === undefined || session.status !== "waiting") return;
+
+          if (msg.ready) {
+            session.readySet.add(msg.playerId);
+          } else {
+            session.readySet.delete(msg.playerId);
+          }
+
+          buildAndBroadcastRoomStatus(session, msg.gameId);
+        }
       });
 
       socket.on("close", () => {
         if (adapter !== undefined) {
           fastify.log.info(`Player ${adapter.playerId} disconnected from game ${gameId}`);
+
+          // Remove this player's placement selection so teammates no longer see
+          // a "teammate selecting" state for a disconnected player.
+          const session = sessionManager.getSession(gameId);
+          if (session !== undefined && session.status === "waiting") {
+            session.selectionMap.delete(adapter.playerId);
+
+            // Re-broadcast the updated (cleared) selections to remaining players
+            const selections: Record<string, string[]> = {};
+            for (const [pid, metaIds] of session.selectionMap) {
+              selections[pid] = metaIds;
+            }
+            const broadcastMsg = encodeMessage({
+              type: "placement_selections",
+              gameId,
+              selections,
+            });
+            for (const adp of session.adapters.values()) {
+              const adpWithRaw = adp as { sendRaw?: (payload: string) => void };
+              try { adpWithRaw.sendRaw?.(broadcastMsg); } catch { /* socket may be closed */ }
+            }
+          }
         }
       });
     },

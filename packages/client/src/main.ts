@@ -6,7 +6,7 @@ import gameModes from "./game-modes.json";
 import { ApiClient } from "./api.js";
 import type { TileMetaClient, RoomRecord } from "./api.js";
 import { WsClient } from "./ws-client.js";
-import type { GameStateSnapshot } from "./ws-client.js";
+import type { GameStateSnapshot, RoomStatusData } from "./ws-client.js";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -63,17 +63,20 @@ interface PlacedUnit {
 
 // ─── State ─────────────────────────────────────────────────────────────────────
 
-// VITE_SERVER_PORT — override backend port in dev (e.g. VITE_SERVER_PORT=3001 pnpm dev)
-// Falls back to 3000 if not set.
+// DEV 모드: Vite 프록시를 통해 서버에 접근 (어떤 hostname으로 접속해도 동작)
+//   API → 상대경로 "" → Vite proxy /api → localhost:3000
+//   WS  → 같은 origin의 Vite dev server → Vite proxy /ws → ws://localhost:3000
+// VITE_SERVER_PORT: 서버 포트 오버라이드 (기본 3000). 직접 접속 시에만 사용됨.
 const _serverPort = (import.meta.env["VITE_SERVER_PORT"] as string | undefined) ?? "3000";
 const _serverHost = window.location.hostname;
 const _proto = window.location.protocol;
+const _devPort = window.location.port || "5173";
 
 const API_BASE = import.meta.env.DEV
-  ? `${_proto}//${_serverHost}:${_serverPort}`
+  ? ""  // 상대경로 → Vite proxy /api/** → localhost:_serverPort
   : gameModes.serverUrl;
 const WS_BASE = import.meta.env.DEV
-  ? `${_proto === "https:" ? "wss" : "ws"}://${_serverHost}:${_serverPort}`
+  ? `${_proto === "https:" ? "wss" : "ws"}://${_serverHost}:${_devPort}`  // Vite proxy /ws/**
   : gameModes.wsUrl;
 
 const api = new ApiClient(API_BASE);
@@ -100,6 +103,8 @@ let selectedUnitTab: string = "tanker";
 /** playerId → metaIds they currently have placed/selected (received via WS) */
 let teammateSelections: Record<string, string[]> = {};
 let lastGameState: GameStateSnapshot | null = null;
+let currentRoomStatus: RoomStatusData | null = null;
+let isPlayerReady = false;
 
 // Tile metadata cache — loaded once from server, keyed by tileType
 let tileMetas: Map<string, TileMetaClient> = new Map();
@@ -143,6 +148,85 @@ const SKILL_NAME_KO: Record<string, string> = {
 const SKILL_DESC_KO: Record<string, string> = {
   skill_shield_defend: "패시브. 관통·광선 차단, 타일 효과 흡수.",
   skill_t2_pull: "사거리 1~3 적을 인접 칸으로 당김. 1회.",
+};
+
+/** Korean names for weapon nameKeys (server returns nameKey as "name") */
+const WEAPON_NAME_KO: Record<string, string> = {
+  "weapon.ta_melee_kb.name":       "강타",
+  "weapon.fa_rush_kb.name":        "돌진 강타",
+  "weapon.ra_penetrate_absorb.name":"관통 흡수",
+  "weapon.ba_melee_fire.name":     "화염 강타",
+  "weapon.ba_self_ignite.name":    "자기 점화",
+  "weapon.arc_ricochet.name":      "도탄",
+  "weapon.ua_confuse_ranged.name": "혼란 사격",
+  "weapon.tb_melee_kb.name":       "강격",
+  "weapon.hook.name":              "갈고리",
+  "weapon.fb_wide_kb.name":        "광역 강타",
+  "weapon.rb_penetrate_fire.name": "화염 관통",
+  "weapon.bb_melee_kb2.name":      "이중 강타",
+  "weapon.ab_arc_fireball.name":   "화염구",
+  "weapon.ub_confuse_melee.name":  "혼란 근접",
+  "weapon.shock_melee.name":       "충격 강타",
+  "weapon.fc_rush_kb.name":        "초강 돌진",
+  "weapon.rc_shockwave.name":      "충격파",
+  "weapon.bc_water_bomb.name":     "물폭탄",
+  "weapon.uc_pylon.name":          "파일런",
+  "weapon.td_melee_frost.name":    "빙결 강타",
+  "weapon.fd_wide_frost.name":     "빙결 광격",
+  "weapon.rd_ice_arrow.name":      "빙결 화살",
+  "weapon.rd_melee.name":          "근접 타격",
+  "weapon.bd_water_convert.name":  "물 변환",
+  "weapon.ad_arc_mass.name":       "광역 포격",
+  "weapon.ud_frost_tile.name":     "서리 타일",
+};
+
+/** Passive skill display info (keyed by passiveId) */
+const PASSIVE_INFO: Record<string, { name: string; desc: string; icon: string }> = {
+  passive_shield:            { name: "방패 방어",     desc: "관통·광선 공격 차단",           icon: "🛡️" },
+  passive_tile_absorb_attack:{ name: "타일 흡수",     desc: "인접 속성 타일 흡수 후 공격",   icon: "⚗️" },
+  passive_melee_mastery:     { name: "근접 마스터리", desc: "근접 피해 1 감소",               icon: "⚔️" },
+  passive_fire_affinity:     { name: "불 친화성",     desc: "불 타일 진입 시 평지화·회복",   icon: "🔥" },
+  passive_medic:             { name: "의무병",        desc: "턴 시작 시 인접 아군 1 치유",   icon: "💊" },
+  passive_agility:           { name: "민첩",          desc: "공격 후 추가 이동 1",           icon: "👟" },
+  passive_turn_arson:        { name: "방화",          desc: "인접 적 있으면 불 타일 적용",   icon: "🌋" },
+  passive_insulator:         { name: "절연체",        desc: "전기 면역, 도체 차단",          icon: "⚡" },
+  passive_generator:         { name: "발전기",        desc: "전기 피해 2배 증폭(반경2)",     icon: "🔋" },
+  passive_freeze_immunity:   { name: "빙결 면역",     desc: "빙결 불가",                     icon: "❄️" },
+};
+
+/** Passives that behave as player-activated skills (shown in skills slot, not passive badges) */
+const ACTIVE_PASSIVE_IDS = new Set(["passive_tile_absorb_attack"]);
+
+/** Korean names for status effects */
+const EFFECT_NAME_KO: Record<string, string> = {
+  fire:      "화염",
+  water:     "침수",
+  ice:       "빙결",
+  electric:  "감전",
+  acid:      "부식",
+  sand:      "모래",
+  stun:      "기절",
+  freeze:    "빙결",
+  poison:    "독",
+  confused:  "혼란",
+  burn:      "화상",
+  frozen:    "동결",
+};
+
+/** Tile attribute names for absorb skill display */
+const TILE_ATTR_KO: Record<string, string> = {
+  fire: "화염", water: "침수", ice: "빙결",
+  electric: "감전", acid: "부식", sand: "모래",
+};
+
+/** Attribute effect descriptions for tooltips */
+const ATTR_EFFECT_KO: Record<string, string> = {
+  fire:     "화염 효과 부여 (2턴간 화염 피해)",
+  water:    "침수 효과 부여 (이동력 감소)",
+  ice:      "빙결 효과 부여 (1턴 행동 불능)",
+  electric: "감전 효과 (전기 체인 피해)",
+  acid:     "부식 효과 (방어구 감소)",
+  sand:     "모래 효과 (이동력 감소)",
 };
 
 const UNIT_COLOR: Record<string, string> = {
@@ -726,19 +810,31 @@ function drawUnit(
     const spriteH = HW * 3.5;
     const spriteW = spriteH * (404 / 1008);
     const drawX = cx - spriteW / 2;
-    const drawY = feetY - spriteH; // feet at bottom of sprite
+    // Sprites have 20px bottom margin (out of 1008px total height).
+    // Shift drawY up by that margin so the actual feet land exactly at feetY.
+    const bottomMargin = spriteH * (20 / 1008);
+    const drawY = feetY - spriteH + bottomMargin;
 
-    // Shadow ellipse at feet
+    // Shadow ellipse at feet (at feetY, slightly above the tile center)
     ctx.beginPath();
-    ctx.ellipse(cx, feetY - HH * 0.3, r * 0.7, r * 0.22, 0, 0, Math.PI * 2);
+    ctx.ellipse(cx, feetY - HH * 0.15, r * 0.7, r * 0.22, 0, 0, Math.PI * 2);
     ctx.fillStyle = "rgba(0,0,0,0.35)";
     ctx.fill();
 
-    // Sprite glow when selected
+    // Thick sprite outline when selected (multi-directional drop-shadow creates a solid border)
     if (selectionColor && !dead) {
       ctx.save();
-      ctx.shadowColor = selectionColor;
-      ctx.shadowBlur  = 20;
+      const s = 3;
+      ctx.filter = [
+        `drop-shadow(${s}px 0 0 ${selectionColor})`,
+        `drop-shadow(-${s}px 0 0 ${selectionColor})`,
+        `drop-shadow(0 ${s}px 0 ${selectionColor})`,
+        `drop-shadow(0 -${s}px 0 ${selectionColor})`,
+        `drop-shadow(${s}px ${s}px 0 ${selectionColor})`,
+        `drop-shadow(-${s}px ${s}px 0 ${selectionColor})`,
+        `drop-shadow(${s}px -${s}px 0 ${selectionColor})`,
+        `drop-shadow(-${s}px -${s}px 0 ${selectionColor})`,
+      ].join(" ");
       ctx.drawImage(spriteImg, drawX, drawY, spriteW, spriteH);
       ctx.restore();
       ctx.globalAlpha = dead ? 0.25 : 1;
@@ -823,13 +919,40 @@ interface UnitInfoData {
   activeEffects: Array<{ effectType: string; turnsRemaining: number }>;
   actionsUsed: { moved: boolean; attacked: boolean; skillUsed: boolean; extinguished: boolean };
   weapon: {
+    id?: string;
     name: string;
     damage: number;
     minRange: number;
     maxRange: number;
     attackType: string;
     attribute: string;
+    knockback?: unknown;
+    splash?: unknown;
+    rush?: boolean;
+    confusion?: unknown;
+    applyTileEffect?: unknown;
+    selfTileEffect?: unknown;
+    penetrating?: boolean;
+    arcing?: boolean;
   };
+  weapon2?: {
+    id?: string;
+    name: string;
+    damage: number;
+    minRange: number;
+    maxRange: number;
+    attackType: string;
+    attribute: string;
+    knockback?: unknown;
+    splash?: unknown;
+    rush?: boolean;
+    confusion?: unknown;
+    applyTileEffect?: unknown;
+    selfTileEffect?: unknown;
+    penetrating?: boolean;
+    arcing?: boolean;
+  } | null;
+  passives?: Array<{ passiveId: string; nameKey: string; descKey: string }>;
   skills?: SkillInfo[];
 }
 
@@ -927,8 +1050,9 @@ function renderIso(canvas: HTMLCanvasElement, opts: RenderOpts): void {
   const baseTile = opts.baseTile ?? "plain";
   const p = isoParams(gridSize, opts.availW, opts.availH);
 
-  canvas.width = p.canvasW;
-  canvas.height = p.canvasH;
+  // 캔버스 크기가 실제로 변할 때만 설정 (layout reflow 방지)
+  if (canvas.width !== p.canvasW)  canvas.width  = p.canvasW;
+  if (canvas.height !== p.canvasH) canvas.height = p.canvasH;
 
   const ctx = canvas.getContext("2d")!;
   ctx.clearRect(0, 0, p.canvasW, p.canvasH);
@@ -1447,12 +1571,133 @@ async function connectHumanPlayer(gameId: string): Promise<void> {
       teammateSelections = selections;
       const maxUnits = currentMode?.maxUnitsPerPlayer ?? 3;
       renderUnitCards(maxUnits);
+      renderTeamSelectionBar(); // update team bar in placement screen
+    },
+    onRoomStatus: (data) => {
+      currentRoomStatus = data;
+      if (document.getElementById("screen-waiting-room")?.classList.contains("active")) {
+        renderWaitingRoom(data);
+      }
+      if (data.allReady && !document.getElementById("screen-placement")?.classList.contains("active")) {
+        // All ready → transition to placement
+        void openPlacementScreen(currentGameId!);
+      }
     },
   });
 
-  // Open placement screen immediately (player was already pre-registered)
-  setStatus("배치 단계로 진입...", "ok");
-  await openPlacementScreen(gameId);
+  // Show waiting room (not placement directly)
+  setStatus("대기실 진입...", "ok");
+  isPlayerReady = false;
+  showScreen("screen-waiting-room");
+  renderWaitingRoomShell(gameId);
+}
+
+// ─── Waiting Room ─────────────────────────────────────────────────────────────
+
+function renderWaitingRoomShell(gameId: string): void {
+  const el = document.getElementById("wr-game-id");
+  if (el) el.textContent = gameId.slice(0, 20);
+  const mapEl = document.getElementById("wr-map-name");
+  if (mapEl && currentMode) mapEl.textContent = currentMode.mapId;
+  const countEl = document.getElementById("wr-player-count");
+  if (countEl && currentMode) countEl.textContent = `${currentMode.playerCount}인`;
+  // slots placeholder until room_status arrives
+  const slotsEl = document.getElementById("wr-player-slots");
+  if (slotsEl) slotsEl.innerHTML = `<div class="wr-loading">연결 중...</div>`;
+}
+
+function renderWaitingRoom(data: RoomStatusData): void {
+  const slotsEl = document.getElementById("wr-player-slots");
+  if (!slotsEl) return;
+
+  // Group by teamIndex
+  const teams: Map<number, typeof data.players> = new Map();
+  for (const p of data.players) {
+    if (!teams.has(p.teamIndex)) teams.set(p.teamIndex, []);
+    teams.get(p.teamIndex)!.push(p);
+  }
+
+  const TEAM_COLORS = ["#388bfd", "#f85149", "#a371f7", "#e3b341"];
+
+  let html = `<div class="wr-teams-grid" style="--team-count:${teams.size}">`;
+  for (const [teamIdx, players] of [...teams.entries()].sort((a, b) => a[0] - b[0])) {
+    const color = TEAM_COLORS[teamIdx] ?? "#888";
+    html += `<div class="wr-team-col">
+      <div class="wr-team-header" style="color:${color}">팀 ${teamIdx + 1}</div>`;
+    for (const p of players) {
+      const initial = p.isAi ? "AI" : p.playerId.slice(0, 2).toUpperCase();
+      const isMe = p.playerId === humanPlayerId;
+      const readyClass = p.ready ? "ready" : "waiting";
+      html += `
+        <div class="wr-player-slot ${readyClass} ${isMe ? "me" : ""}">
+          <div class="wr-avatar" style="background:${color}33;border-color:${color}44">${p.isAi ? "🤖" : initial}</div>
+          <div class="wr-slot-info">
+            <span class="wr-player-name">${isMe ? `${p.playerId} (나)` : p.playerId}</span>
+            <span class="wr-ready-badge ${readyClass}">${p.isAi ? "자동준비" : p.ready ? "✓ 준비완료" : "대기 중..."}</span>
+          </div>
+        </div>`;
+    }
+    html += `</div>`;
+  }
+  html += `</div>`;
+  slotsEl.innerHTML = html;
+
+  // Update status message
+  const statusEl = document.getElementById("wr-status-msg");
+  if (statusEl) {
+    if (data.allReady) {
+      statusEl.textContent = "✅ 모든 플레이어 준비 완료! 배치 화면으로 이동합니다...";
+      statusEl.className = "wr-status ok";
+    } else {
+      const readyCount = data.players.filter(p => p.ready).length;
+      statusEl.textContent = `${readyCount} / ${data.expectedPlayerCount} 명 준비 완료`;
+      statusEl.className = "wr-status";
+    }
+  }
+
+  // Update ready button
+  const btn = document.getElementById("wr-ready-btn") as HTMLButtonElement | null;
+  if (btn) {
+    btn.textContent = isPlayerReady ? "⏸ 준비 취소" : "✅ 준비 완료";
+    btn.className = `wr-ready-btn ${isPlayerReady ? "cancel" : "confirm"}`;
+  }
+}
+
+function renderTeamSelectionBar(): void {
+  const bar = document.getElementById("placement-team-bar");
+  if (!bar) return;
+
+  const entries = Object.entries(teammateSelections).filter(([pid]) => {
+    if (pid === humanPlayerId) return false;
+    const pidTeam = lastGameState?.players[pid]?.teamIndex;
+    return pidTeam !== undefined && pidTeam === humanTeamIndex;
+  });
+
+  if (entries.length === 0) {
+    bar.style.display = "none";
+    return;
+  }
+  bar.style.display = "flex";
+
+  const TEAM_COLORS = ["#388bfd", "#f85149", "#a371f7", "#e3b341"];
+  const myTeamColor = TEAM_COLORS[humanTeamIndex] ?? "#4fc3f7";
+
+  bar.innerHTML = entries.map(([pid, metaIds]) => {
+    const shortName = pid.length > 10 ? pid.slice(0, 8) + "…" : pid;
+    const unitPortraits = metaIds.map(mid => {
+      const portrait = portraitPath(mid);
+      const color = UNIT_COLOR[availableUnits.find(u => u.id === mid)?.class ?? ""] ?? "#888";
+      return portrait
+        ? `<div class="ptb-unit-portrait"><img src="${portrait}" alt="${mid}" /></div>`
+        : `<div class="ptb-unit-portrait ptb-fallback" style="background:${color}">${mid.slice(0,2).toUpperCase()}</div>`;
+    }).join("");
+    return `
+      <div class="ptb-teammate">
+        <div class="ptb-avatar" style="border-color:${myTeamColor}33">${pid.slice(0,2).toUpperCase()}</div>
+        <div class="ptb-name">${shortName}</div>
+        <div class="ptb-units">${unitPortraits.length > 0 ? unitPortraits : '<span class="ptb-none">선택 중...</span>'}</div>
+      </div>`;
+  }).join(`<div class="ptb-divider">│</div>`);
 }
 
 // ─── Placement phase ───────────────────────────────────────────────────────────
@@ -1602,12 +1847,11 @@ function renderUnitCards(maxUnits: number): void {
       ? `<div class="uc-portrait"><img src="${portrait}" alt="${name}" /></div>`
       : `<div class="uc-abbr" style="background:${color}">${abbr}</div>`;
     const takenTitle = isTakenByTeammate ? ` title="팀원이 선택 중"` : "";
+    const takenByAttr = isTakenByTeammate ? ` data-taken-by="${lockedByWhom(unit.id) ?? '팀원'}"` : "";
     const stateClass = [isSelected ? "selected" : "", isUsed ? "used" : "", isTakenByTeammate ? "teammate-taken" : ""].filter(Boolean).join(" ");
-    return `<div class="unit-card ${stateClass}" data-meta-id="${unit.id}"${takenTitle}>
+    return `<div class="unit-card ${stateClass}" data-meta-id="${unit.id}"${takenTitle}${takenByAttr}>
       ${portraitHtml}
       <div class="uc-name">${name}</div>
-      <div class="uc-stats">HP ${unit.baseHealth} · MOV ${unit.baseMovement}</div>
-      <div class="uc-stats">ARM ${unit.baseArmor}</div>
       ${isTakenByTeammate ? `<div class="uc-taken">팀원선택중</div>` : ""}
       ${isUsed ? `<div class="uc-placed">배치완료</div>` : ""}
     </div>`;
@@ -1848,6 +2092,12 @@ let selectedGameUnitPos: { row: number; col: number } | null = null;
 let skillTargetingSkillId: string | null = null;
 let skillTargetHighlights: { row: number; col: number }[] = [];
 let lastSkillOptions: SkillInfo[] = [];
+let tileAbsorbMode = false;
+let pendingAbsorbTile: { row: number; col: number } | null = null;
+let lastUnitInfo: UnitInfoData | null = null;
+let activeWeaponId: string | null = null;   // null = primary weapon
+let canTargetEmptyTiles = false;            // weapon can hit empty tiles (AoE/tile-effect)
+let canUndoMove = false;                    // server says move can be undone
 
 // ── Overlay animation system ──────────────────────────────────────────────────
 interface AttackAnim {
@@ -2022,6 +2272,15 @@ function clearUnitSelection(): void {
   attackTargetHighlights = [];
   skillTargetingSkillId = null;
   skillTargetHighlights = [];
+  tileAbsorbMode = false;
+  pendingAbsorbTile = null;
+  lastUnitInfo = null;
+  activeWeaponId = null;
+  canTargetEmptyTiles = false;
+  canUndoMove = false;
+  hideAttackPreviewCard();
+  hideRichTooltip();
+  renderBottomBar(null);
 }
 
 async function fetchAndShowUnitOptions(
@@ -2029,6 +2288,7 @@ async function fetchAndShowUnitOptions(
   pos: { row: number; col: number },
   state: GameStateSnapshot,
   gridSize: number,
+  overrideWeaponId?: string,
 ): Promise<void> {
   const token = api.getToken();
   if (!token || !currentGameId) return;
@@ -2040,8 +2300,9 @@ async function fetchAndShowUnitOptions(
   attackTargetHighlights = [];
 
   try {
+    const weaponParam = overrideWeaponId ? `&weaponId=${encodeURIComponent(overrideWeaponId)}` : "";
     const res = await fetch(
-      `${API_BASE}/api/v1/rooms/${currentGameId}/unit-options?playerId=${humanPlayerId}&unitId=${encodeURIComponent(unitId)}`,
+      `${API_BASE}/api/v1/rooms/${currentGameId}/unit-options?playerId=${humanPlayerId}&unitId=${encodeURIComponent(unitId)}${weaponParam}`,
       { headers: { Authorization: `Bearer ${token}` } },
     );
     if (res.ok) {
@@ -2049,19 +2310,30 @@ async function fetchAndShowUnitOptions(
         reachableTiles: Array<{ row: number; col: number }>;
         attackableTiles: Array<{ row: number; col: number }>;
         enemyPositions: Array<{ row: number; col: number }>;
+        canTargetEmptyTiles?: boolean;
         canMove: boolean;
         canAttack: boolean;
+        canUndo?: boolean;
         skills?: SkillInfo[];
         unitInfo: UnitInfoData;
       };
+      canTargetEmptyTiles = data.canTargetEmptyTiles ?? false;
+      canUndoMove = data.canUndo ?? false;
       moveHighlights = data.canMove ? data.reachableTiles : [];
-      // Attack range = tiles in range WITHOUT enemy (dim)
-      const enemySet = new Set(data.enemyPositions.map(p => `${p.row},${p.col}`));
-      attackRangeHighlights = data.canAttack
-        ? data.attackableTiles.filter(p => !enemySet.has(`${p.row},${p.col}`))
-        : [];
-      attackTargetHighlights = data.canAttack ? data.enemyPositions : [];
+      // When weapon can target empty tiles, all attackable tiles are clickable
+      if (canTargetEmptyTiles) {
+        attackRangeHighlights = [];
+        attackTargetHighlights = data.canAttack ? data.attackableTiles : [];
+      } else {
+        const enemySet = new Set(data.enemyPositions.map(p => `${p.row},${p.col}`));
+        attackRangeHighlights = data.canAttack
+          ? data.attackableTiles.filter(p => !enemySet.has(`${p.row},${p.col}`))
+          : [];
+        attackTargetHighlights = data.canAttack ? data.enemyPositions : [];
+      }
+      lastUnitInfo = data.unitInfo;
       renderUnitInfoPanel(data.unitInfo);
+      renderBottomBar(data.unitInfo);
       lastSkillOptions = data.skills ?? [];
     }
   } catch { /* ignore */ }
@@ -2096,6 +2368,274 @@ async function fetchAndShowUnitOptions(
   }
 }
 
+/** Re-render board canvas with the current highlights (after mode changes) */
+function rerenderBoardHighlights(): void {
+  if (!lastGameState) return;
+  const canvas = document.getElementById("board-canvas") as HTMLCanvasElement | null;
+  if (!canvas) return;
+  const playerIds = Object.keys(lastGameState.players);
+  const unitsArr = Object.values(lastGameState.units).map((u) => ({
+    unitId: u.unitId as string,
+    metaId: u.metaId as string,
+    playerId: u.playerId as string,
+    position: u.position,
+    alive: u.alive,
+    teamIndex: (lastGameState!.players[u.playerId as string]?.teamIndex ?? 0) as number,
+    currentHealth: u.currentHealth as number,
+  }));
+  renderIso(canvas, {
+    gridSize: lastGameState.map.gridSize,
+    baseTile: lastGameState.map.baseTile ?? "plain",
+    tiles: lastGameState.map.tiles as unknown as Record<string, { attribute: string }>,
+    units: unitsArr,
+    playerIds,
+    moveTiles: moveHighlights,
+    attackRangeTiles: attackRangeHighlights,
+    attackTargetTiles: attackTargetHighlights,
+    skillTargetTiles: skillTargetHighlights,
+    selectedPos: selectedGameUnitPos,
+    selectedUnitId,
+    tileMetas,
+  });
+}
+
+/** Render weapon slot HTML for the bottom action bar */
+function weaponSlotHtml(w: UnitInfoData["weapon"] | null | undefined, label: string): string {
+  if (!w) return `<span class="bws-label">${label}</span><span class="bws-empty">—</span>`;
+  const atTypeMap: Record<string, string> = { ranged: "원거리", melee: "근접", artillery: "포격", special: "특수" };
+  const atType = atTypeMap[w.attackType] ?? w.attackType;
+  const atClass = `weapon-${w.attackType}`;
+  const attrHtml = w.attribute && w.attribute !== "none"
+    ? `<span class="bws-attr bws-attr-${w.attribute}">${TILE_ATTR_KO[w.attribute] ?? w.attribute}</span>` : "";
+  const rangeText = w.minRange === w.maxRange ? `${w.maxRange}` : `${w.minRange}~${w.maxRange}`;
+  const extras: string[] = [];
+  if (w.knockback) extras.push("넉백");
+  if (w.splash)    extras.push("스플래시");
+  if (w.rush)      extras.push("돌진");
+  if (w.confusion) extras.push("혼란");
+  if (w.applyTileEffect) extras.push("타일효과");
+  if (w.penetrating)     extras.push("관통");
+  if (w.arcing)          extras.push("포물선");
+  const extrasHtml = extras.length > 0
+    ? `<div class="bws-badges">${extras.map(e => `<span class="bws-badge">${e}</span>`).join("")}</div>` : "";
+  const wname = WEAPON_NAME_KO[w.name ?? ""] ?? w.name ?? "";
+  return `
+    <span class="bws-label">${label}</span>
+    <span class="bws-name">${wname}</span>
+    <div class="bws-type-row"><span class="weapon-type ${atClass}">${atType}</span>${attrHtml}</div>
+    <span class="bws-stats">공격력 ${w.damage} · 사거리 ${rangeText}</span>
+    ${extrasHtml}
+  `;
+}
+
+/** Update the bottom XCOM-style action bar with the currently selected unit's weapons & passives */
+function renderBottomBar(info: UnitInfoData | null): void {
+  const passivesEl = document.getElementById("bottom-passives");
+  const skillsEl   = document.getElementById("bottom-skills");
+  const weapon1El  = document.getElementById("bottom-weapon1");
+  const weapon2El  = document.getElementById("bottom-weapon2");
+  if (!passivesEl || !skillsEl || !weapon1El || !weapon2El) return;
+
+  if (info === null) {
+    passivesEl.innerHTML = '<span class="bottom-no-passive">유닛을 선택하세요</span>';
+    skillsEl.innerHTML   = "";
+    weapon1El.innerHTML  = '<span class="bws-label">무기1</span><span class="bws-empty">—</span>';
+    weapon2El.innerHTML  = '<span class="bws-label">무기2</span><span class="bws-empty">—</span>';
+    weapon1El.classList.remove("bws-active");
+    weapon2El.classList.remove("bws-active");
+    return;
+  }
+
+  const passivesList = info.passives ?? [];
+
+  // ── Passive badges (pure passives only, not active-passives) ──
+  const purePassives = passivesList.filter(p => !ACTIVE_PASSIVE_IDS.has(p.passiveId));
+  if (purePassives.length > 0) {
+    passivesEl.innerHTML = purePassives.map(p => {
+      const pi = PASSIVE_INFO[p.passiveId];
+      const name = pi?.name ?? p.passiveId;
+      const icon = pi?.icon ?? "✨";
+      const desc = pi?.desc ?? "";
+      return `<div class="bottom-passive-badge" data-tooltip="${desc}" data-passive-id="${p.passiveId}"><span class="bottom-passive-icon">${icon}</span><span class="bottom-passive-name">${name}</span></div>`;
+    }).join("");
+    // Bind rich tooltip handlers
+    passivesEl.querySelectorAll<HTMLElement>("[data-passive-id]").forEach(badge => {
+      const pid = badge.dataset["passiveId"] ?? "";
+      const pi = PASSIVE_INFO[pid];
+      if (!pi) return;
+      badge.addEventListener("mouseenter", (e) => showRichTooltip(e as MouseEvent, `
+        <div class="rtt-title">${pi.icon} ${pi.name}</div>
+        <div class="rtt-extra-row">${pi.desc}</div>
+      `));
+      badge.addEventListener("mousemove", (e) => repositionRichTooltip(e as MouseEvent));
+      badge.addEventListener("mouseleave", () => hideRichTooltip());
+    });
+  } else {
+    passivesEl.innerHTML = '<span class="bottom-no-passive">패시브 없음</span>';
+  }
+
+  // ── Active skill slots (active-passives) ──
+  const activePassives = passivesList.filter(p => ACTIVE_PASSIVE_IDS.has(p.passiveId));
+  if (activePassives.length > 0) {
+    skillsEl.innerHTML = activePassives.map(p => {
+      const pi = PASSIVE_INFO[p.passiveId];
+      const name  = pi?.name ?? p.passiveId;
+      const icon  = pi?.icon ?? "✨";
+      const desc  = pi?.desc ?? "";
+      const armed = pendingAbsorbTile !== null;
+      const armedAttr = armed && lastGameState
+        ? (() => {
+            const key = `${pendingAbsorbTile!.row},${pendingAbsorbTile!.col}`;
+            const tAttr = (lastGameState.map.tiles as Record<string, { attribute: string }>)[key]?.attribute ?? "";
+            return TILE_ATTR_KO[tAttr] ?? tAttr;
+          })()
+        : "";
+      const statusText = armed ? `${armedAttr} 흡수 준비됨` : "클릭 → 타일 선택";
+      return `<button class="bottom-skill-btn${armed ? " skill-armed" : ""}" data-active-passive="${p.passiveId}" data-tooltip="${desc}">
+        <span class="bottom-skill-btn-icon">${icon}</span>
+        <span class="bottom-skill-btn-label">${name}</span>
+        <span class="bottom-skill-btn-status">${statusText}</span>
+      </button>`;
+    }).join("");
+    // Bind click + rich tooltip handlers
+    skillsEl.querySelectorAll<HTMLButtonElement>("[data-active-passive]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const passiveId = btn.getAttribute("data-active-passive") ?? "";
+        handleActivePassiveClick(passiveId);
+      });
+      btn.addEventListener("mouseenter", (e) => {
+        const pid = btn.getAttribute("data-active-passive") ?? "";
+        const pi = PASSIVE_INFO[pid];
+        if (!pi) return;
+        showRichTooltip(e as MouseEvent, `
+          <div class="rtt-title">${pi.icon} ${pi.name}</div>
+          <div class="rtt-extra-row">${pi.desc}</div>
+        `);
+      });
+      btn.addEventListener("mousemove", (e) => repositionRichTooltip(e as MouseEvent));
+      btn.addEventListener("mouseleave", () => hideRichTooltip());
+    });
+  } else {
+    skillsEl.innerHTML = "";
+  }
+
+  // ── Weapons ──
+  const w1Active = !!info.weapon && activeWeaponId === null;
+  const w2Active = !!(info.weapon2) && activeWeaponId !== null;
+  weapon1El.innerHTML = weaponSlotHtml(info.weapon, "무기1");
+  weapon1El.classList.toggle("bws-active", w1Active);
+  weapon1El.classList.toggle("bws-selected", w1Active);
+  weapon1El.style.cursor = info.weapon ? "pointer" : "default";
+  weapon2El.innerHTML = weaponSlotHtml(info.weapon2 ?? null, "무기2");
+  weapon2El.classList.toggle("bws-active", !!info.weapon2);
+  weapon2El.classList.toggle("bws-selected", w2Active);
+  weapon2El.style.cursor = info.weapon2 ? "pointer" : "default";
+
+  // Weapon slot click — switch active weapon
+  weapon1El.onclick = info.weapon ? () => {
+    activeWeaponId = null;
+    if (selectedUnitId && lastGameState && selectedGameUnitPos)
+      void fetchAndShowUnitOptions(selectedUnitId, selectedGameUnitPos, lastGameState, lastGameState.map.gridSize);
+  } : null;
+  weapon2El.onclick = info.weapon2 ? () => {
+    activeWeaponId = info.weapon2!.id ?? null;
+    if (selectedUnitId && lastGameState && selectedGameUnitPos)
+      void fetchAndShowUnitOptions(selectedUnitId, selectedGameUnitPos, lastGameState, lastGameState.map.gridSize, activeWeaponId ?? undefined);
+  } : null;
+
+  // Weapon slot rich tooltip (hover anywhere on slot → full weapon detail)
+  weapon1El.onmouseenter = info.weapon ? (e) => showRichTooltip(e as MouseEvent, weaponTooltipHtml(info.weapon)) : null;
+  weapon1El.onmousemove  = info.weapon ? (e) => repositionRichTooltip(e as MouseEvent) : null;
+  weapon1El.onmouseleave = () => hideRichTooltip();
+  weapon2El.onmouseenter = info.weapon2 ? (e) => showRichTooltip(e as MouseEvent, weaponTooltipHtml(info.weapon2)) : null;
+  weapon2El.onmousemove  = info.weapon2 ? (e) => repositionRichTooltip(e as MouseEvent) : null;
+  weapon2El.onmouseleave = () => hideRichTooltip();
+
+  // Attribute badge specific tooltip within weapon slots
+  // (stopPropagation prevents parent slot tooltip from overwriting)
+  [weapon1El, weapon2El].forEach(slotEl => {
+    slotEl.querySelectorAll<HTMLElement>(".bws-attr").forEach(attrEl => {
+      const attrClass = [...attrEl.classList].find(c => c.startsWith("bws-attr-") && c !== "bws-attr");
+      const attr = attrClass?.replace("bws-attr-", "") ?? "";
+      if (!attr) return;
+      const attrKo = TILE_ATTR_KO[attr] ?? attr;
+      const effect = ATTR_EFFECT_KO[attr] ?? "";
+      attrEl.style.cursor = "help";
+      attrEl.addEventListener("mouseenter", (e) => {
+        e.stopPropagation();
+        showRichTooltip(e as MouseEvent,
+          `<div class="rtt-title">${attrKo} 속성</div>
+           <div class="rtt-sep"></div>
+           <div class="rtt-extra-row">${effect}</div>`);
+      });
+      attrEl.addEventListener("mousemove", (e) => {
+        e.stopPropagation();
+        repositionRichTooltip(e as MouseEvent);
+      });
+      attrEl.addEventListener("mouseleave", () => hideRichTooltip());
+    });
+  });
+
+  // ── Undo move button ──
+  const passArea = document.getElementById("bottom-pass-area");
+  const existingUndo = document.getElementById("undo-move-btn");
+  if (existingUndo) existingUndo.remove();
+  if (canUndoMove && passArea) {
+    const undoBtn = document.createElement("button");
+    undoBtn.id = "undo-move-btn";
+    undoBtn.textContent = "↩ 이동취소";
+    undoBtn.addEventListener("click", () => void submitUndoMove());
+    passArea.prepend(undoBtn);
+  }
+}
+
+/** Handle click on an active-passive skill button */
+function handleActivePassiveClick(passiveId: string): void {
+  if (passiveId === "passive_tile_absorb_attack") {
+    if (!selectedUnitId || !lastGameState) return;
+
+    // Toggle: if already armed, disarm
+    if (pendingAbsorbTile !== null) {
+      pendingAbsorbTile = null;
+      tileAbsorbMode = false;
+      skillTargetHighlights = [];
+      renderBottomBar(lastUnitInfo);
+      rerenderBoardHighlights();
+      return;
+    }
+
+    // Find adjacent tiles with absorb-able attribute
+    const unit = Object.values(lastGameState.units).find(u => u.unitId === selectedUnitId);
+    if (!unit) return;
+    const { row, col } = unit.position as { row: number; col: number };
+    const neighbors = [
+      { row: row - 1, col }, { row: row + 1, col },
+      { row, col: col - 1 }, { row, col: col + 1 },
+      { row, col },  // own tile also valid
+    ];
+    const absorbableAttrs = new Set(["fire", "water", "ice", "electric", "acid", "sand"]);
+    const tiles = lastGameState.map.tiles as Record<string, { attribute: string }>;
+    const absorbTiles = neighbors.filter(p => {
+      const attr = tiles[`${p.row},${p.col}`]?.attribute;
+      return attr !== undefined && absorbableAttrs.has(attr);
+    });
+
+    if (absorbTiles.length === 0) {
+      // No absorb-able tiles nearby — inform user
+      const btn = document.querySelector<HTMLButtonElement>(`[data-active-passive="${passiveId}"]`);
+      if (btn) {
+        const orig = btn.querySelector<HTMLElement>(".bottom-skill-btn-status");
+        if (orig) { orig.textContent = "주변에 속성 타일 없음"; setTimeout(() => { if (orig) orig.textContent = "클릭 → 타일 선택"; }, 1500); }
+      }
+      return;
+    }
+
+    tileAbsorbMode = true;
+    skillTargetHighlights = absorbTiles;
+    rerenderBoardHighlights();
+  }
+}
+
 function renderUnitInfoPanel(info: UnitInfoData | null): void {
   const panel = document.getElementById("unit-info-panel");
   if (!panel) return;
@@ -2109,9 +2649,10 @@ function renderUnitInfoPanel(info: UnitInfoData | null): void {
   const hpColor = hpPct > 60 ? "#4caf50" : hpPct > 30 ? "#ff9800" : "#f44336";
 
   const effectsHtml = info.activeEffects.length > 0
-    ? info.activeEffects.map(e =>
-        `<span class="effect-badge effect-${e.effectType}">${e.effectType} ${e.turnsRemaining}턴</span>`
-      ).join("")
+    ? info.activeEffects.map(e => {
+        const ename = EFFECT_NAME_KO[e.effectType] ?? e.effectType;
+        return `<span class="effect-badge effect-${e.effectType}">${ename}(${e.turnsRemaining}턴 남음)</span>`;
+      }).join("")
     : '<span class="effect-none">상태 이상 없음</span>';
 
   const rangeText = info.weapon.minRange === info.weapon.maxRange
@@ -2136,7 +2677,7 @@ function renderUnitInfoPanel(info: UnitInfoData | null): void {
       ${panelIconHtml}
       <div class="unit-info-title">
         <div class="unit-info-name">${unitName}</div>
-        <div class="unit-info-class">${info.class}</div>
+        <div class="unit-info-class">${UNIT_CLASS_KO[info.class] ?? info.class}</div>
       </div>
     </div>
     <div class="unit-info-hp">
@@ -2147,14 +2688,20 @@ function renderUnitInfoPanel(info: UnitInfoData | null): void {
       <div class="unit-info-hp-text">${info.currentHealth} / ${info.maxHealth}</div>
     </div>
     <div class="unit-info-stats">
-      <div class="stat-row"><span class="stat-label">ATK</span><span class="stat-val">${info.weapon.damage}</span></div>
-      <div class="stat-row"><span class="stat-label">RNG</span><span class="stat-val">${rangeText}</span></div>
-      <div class="stat-row"><span class="stat-label">MOV</span><span class="stat-val">${info.movementPoints}/${info.baseMovement}</span></div>
-      <div class="stat-row"><span class="stat-label">ARM</span><span class="stat-val">${info.currentArmor}</span></div>
+      <div class="stat-row"><span class="stat-label">공격력</span><span class="stat-val">${info.weapon.damage}</span></div>
+      <div class="stat-row"><span class="stat-label">사거리</span><span class="stat-val">${rangeText}</span></div>
+      <div class="stat-row"><span class="stat-label">이동력</span><span class="stat-val">${info.movementPoints}/${info.baseMovement}</span></div>
+      <div class="stat-row"><span class="stat-label">방어구</span><span class="stat-val">${info.currentArmor}</span></div>
     </div>
     <div class="unit-info-weapon">
-      <span class="weapon-type weapon-${info.weapon.attackType}">${info.weapon.attackType}</span>
-      <span class="weapon-attr">${info.weapon.attribute}</span>
+      <span class="weapon-type weapon-${info.weapon.attackType}">${
+        info.weapon.attackType === "ranged"    ? "원거리" :
+        info.weapon.attackType === "melee"     ? "근접" :
+        info.weapon.attackType === "artillery" ? "포격" :
+        info.weapon.attackType === "special"   ? "특수" : info.weapon.attackType
+      }</span>
+      ${info.weapon.attribute && info.weapon.attribute !== "none"
+        ? `<span class="weapon-attr weapon-attr-${info.weapon.attribute}">${TILE_ATTR_KO[info.weapon.attribute] ?? info.weapon.attribute}</span>` : ""}
     </div>
     <div class="unit-info-effects">${effectsHtml}</div>
     <div class="unit-info-actions">${actionsHtml}</div>
@@ -2173,6 +2720,22 @@ function renderUnitInfoPanel(info: UnitInfoData | null): void {
 </div>` : ''}
   `;
   panel.classList.add("visible");
+
+  // ── Attribute badge tooltips in the unit info panel ──
+  panel.querySelectorAll<HTMLElement>(".weapon-attr").forEach(attrEl => {
+    const attrClass = [...attrEl.classList].find(c => c.startsWith("weapon-attr-") && c !== "weapon-attr");
+    const attr = attrClass?.replace("weapon-attr-", "") ?? "";
+    if (!attr || attr === "none") return;
+    const attrKo = TILE_ATTR_KO[attr] ?? attr;
+    const effect = ATTR_EFFECT_KO[attr] ?? "";
+    attrEl.style.cursor = "help";
+    attrEl.addEventListener("mouseenter", (e) => showRichTooltip(e as MouseEvent,
+      `<div class="rtt-title">${attrKo} 속성</div>
+       <div class="rtt-sep"></div>
+       <div class="rtt-extra-row">${effect}</div>`));
+    attrEl.addEventListener("mousemove", (e) => repositionRichTooltip(e as MouseEvent));
+    attrEl.addEventListener("mouseleave", () => hideRichTooltip());
+  });
 
   // Skill button click → enter skill targeting mode
   panel.querySelectorAll<HTMLButtonElement>(".skill-btn:not(.skill-btn-disabled)").forEach(btn => {
@@ -2197,7 +2760,6 @@ function renderUnitInfoPanel(info: UnitInfoData | null): void {
           teamIndex: (lastGameState!.players[u.playerId as string]?.teamIndex ?? 0) as number,
           currentHealth: u.currentHealth as number,
         }));
-        const boardWrap = document.querySelector(".board-wrap") as HTMLElement | null;
         renderIso(activeCanvas, {
           gridSize: lastGameState.map.gridSize ?? 11,
           baseTile: lastGameState.map.baseTile ?? "plain",
@@ -2210,8 +2772,8 @@ function renderUnitInfoPanel(info: UnitInfoData | null): void {
           skillTargetTiles: skillTargetHighlights,
           selectedPos: selectedGameUnitPos,
           selectedUnitId,
-          availW: boardWrap?.clientWidth,
-          availH: boardWrap?.clientHeight,
+          availW: animGridParams.availW,
+          availH: animGridParams.availH,
           tileMetas,
         });
       }
@@ -2228,6 +2790,8 @@ async function submitAction(action: {
   unitId?: string;
   skillId?: string;
   targetPosition?: { row: number; col: number };
+  sourceTile?: { row: number; col: number };
+  weaponId?: string;
 }): Promise<void> {
   if (!currentGameId) return;
   const token = api.getToken();
@@ -2239,6 +2803,22 @@ async function submitAction(action: {
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify({ playerId: humanPlayerId, action }),
     });
+  } catch { /* ignore */ }
+}
+
+async function submitUndoMove(): Promise<void> {
+  if (!currentGameId || !selectedUnitId) return;
+  const token = api.getToken();
+  if (!token) return;
+  try {
+    await fetch(`${API_BASE}/api/v1/rooms/${currentGameId}/undo-move`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ playerId: humanPlayerId, unitId: selectedUnitId }),
+    });
+    canUndoMove = false;
+    activeWeaponId = null;
+    clearUnitSelection();
   } catch { /* ignore */ }
 }
 
@@ -2377,10 +2957,10 @@ function showUnitHoverPanel(
         <div class="uhp-hp-text">HP ${unit.currentHealth} / ${maxHp}</div>
       </div>
       <div class="uhp-stats">
-        <div class="uhp-stat"><span class="uhp-stat-label">ARM</span><span class="uhp-stat-val">${unit.currentArmor}</span></div>
-        <div class="uhp-stat"><span class="uhp-stat-label">BASE</span><span class="uhp-stat-val">${meta?.baseArmor ?? "—"}</span></div>
-        <div class="uhp-stat"><span class="uhp-stat-label">MOV</span><span class="uhp-stat-val">${meta?.baseMovement ?? "—"}</span></div>
-        <div class="uhp-stat"><span class="uhp-stat-label">POS</span><span class="uhp-stat-val">${unit.position.row},${unit.position.col}</span></div>
+        <div class="uhp-stat"><span class="uhp-stat-label">방어구</span><span class="uhp-stat-val">${unit.currentArmor}</span></div>
+        <div class="uhp-stat"><span class="uhp-stat-label">기본방어</span><span class="uhp-stat-val">${meta?.baseArmor ?? "—"}</span></div>
+        <div class="uhp-stat"><span class="uhp-stat-label">이동력</span><span class="uhp-stat-val">${meta?.baseMovement ?? "—"}</span></div>
+        <div class="uhp-stat"><span class="uhp-stat-label">위치</span><span class="uhp-stat-val">${unit.position.row},${unit.position.col}</span></div>
       </div>
     </div>
     <div class="uhp-section">
@@ -2467,15 +3047,21 @@ function renderGame(state: GameStateSnapshot): void {
     }
   }
 
-  // board-wrap 크기 기반 동적 타일 크기 계산
-  const boardWrap = document.querySelector(".board-wrap") as HTMLElement | null;
-  const availW = boardWrap?.clientWidth;
-  const availH = boardWrap?.clientHeight;
+  // animGridParams.availW/H는 최초 1회만 board-wrap에서 읽고,
+  // 이후에는 ResizeObserver가 업데이트한 값을 그대로 사용한다.
+  // (매 프레임 clientWidth를 읽으면 canvas 크기 변경 → layout reflow → clientWidth 변동 → 불안정 루프)
+  if (animGridParams.availW === undefined || animGridParams.availH === undefined) {
+    const boardWrap = document.querySelector(".board-wrap") as HTMLElement | null;
+    if (boardWrap && boardWrap.clientWidth > 0 && boardWrap.clientHeight > 0) {
+      animGridParams.availW = boardWrap.clientWidth;
+      animGridParams.availH = boardWrap.clientHeight;
+    }
+  }
 
   // Update overlay animation grid params
   animGridParams.gridSize = gridSize;
-  animGridParams.availW   = availW;
-  animGridParams.availH   = availH;
+  const availW = animGridParams.availW;
+  const availH = animGridParams.availH;
 
   // Detect HP changes → attack particles + floating damage numbers
   for (const u of unitsArr) {
@@ -2540,7 +3126,7 @@ function showHoverTooltip(
     </div>
     <div class="tip-hp">
       <span style="color:${hpColor}">HP ${unit.currentHealth}</span>
-      <span class="tip-armor">ARM ${unit.currentArmor}</span>
+      <span class="tip-armor">방어구 ${unit.currentArmor}</span>
     </div>
     ${actionHint}
   `;
@@ -2552,6 +3138,127 @@ function showHoverTooltip(
 function hideHoverTooltip(): void {
   const tip = document.getElementById("hover-tooltip");
   if (tip) tip.style.display = "none";
+}
+
+// ─── Attack preview card ──────────────────────────────────────────────────────
+
+function showAttackPreviewCard(
+  x: number, y: number,
+  unit: GameStateSnapshot["units"][string] | undefined,
+): void {
+  const card = document.getElementById("attack-preview-card");
+  if (!card) return;
+  if (!unit) { card.style.display = "none"; return; }
+
+  const metaId = unit.metaId as string;
+  const name = UNIT_NAME_KO[metaId] ?? metaId;
+  const portrait = portraitPath(metaId);
+  const portraitHtml = portrait
+    ? `<img class="apc-portrait" src="${portrait}" alt="${name}" />`
+    : `<div class="apc-portrait-fallback">${UNIT_ABBR[metaId] ?? "?"}</div>`;
+  const meta = availableUnits.find(m => m.id === metaId);
+  const maxHp = meta?.baseHealth ?? 1;
+  const hpPct = Math.max(0, Math.min(100, (unit.currentHealth / maxHp) * 100));
+  const hpColor = hpPct > 60 ? "#4caf50" : hpPct > 30 ? "#ff9800" : "#f44336";
+
+  card.innerHTML = `
+    ${portraitHtml}
+    <div class="apc-name">${name}</div>
+    <div class="apc-hp-row">
+      <div class="apc-hp-bar"><div class="apc-hp-fill" style="width:${hpPct}%;background:${hpColor}"></div></div>
+      <div class="apc-hp-text">HP ${unit.currentHealth}/${maxHp}</div>
+    </div>
+    <div class="apc-armor">방어구 ${unit.currentArmor}</div>
+    <div class="apc-hint">⚔️ 공격 대상</div>
+  `;
+  card.style.display = "flex";
+
+  // Position to the left of cursor; fall back to right if near left edge
+  const cw = card.offsetWidth || 148;
+  const left = (x - cw - 20 >= 8) ? (x - cw - 20) : (x + 20);
+  card.style.left = `${left}px`;
+  card.style.top  = `${Math.max(8, y - 60)}px`;
+}
+
+function hideAttackPreviewCard(): void {
+  const card = document.getElementById("attack-preview-card");
+  if (card) card.style.display = "none";
+}
+
+// ─── Rich tooltip (weapon / attribute / skill) ────────────────────────────────
+
+function showRichTooltip(e: MouseEvent, html: string): void {
+  const tip = document.getElementById("rich-tooltip");
+  if (!tip) return;
+  tip.innerHTML = html;
+  tip.style.display = "block";
+  repositionRichTooltip(e);
+}
+
+function repositionRichTooltip(e: MouseEvent): void {
+  const tip = document.getElementById("rich-tooltip");
+  if (!tip || tip.style.display === "none") return;
+  const tw = tip.offsetWidth || 220;
+  const th = tip.offsetHeight || 100;
+  const vw = window.innerWidth;
+  let left = e.clientX + 14;
+  let top  = e.clientY - th - 14;
+  if (left + tw > vw - 8) left = e.clientX - tw - 14;
+  if (top < 8) top = e.clientY + 18;
+  tip.style.left = `${left}px`;
+  tip.style.top  = `${top}px`;
+}
+
+function hideRichTooltip(): void {
+  const tip = document.getElementById("rich-tooltip");
+  if (tip) tip.style.display = "none";
+}
+
+/** Build rich HTML for a weapon slot tooltip */
+function weaponTooltipHtml(w: UnitInfoData["weapon"] | null | undefined): string {
+  if (!w) return `<div style="color:var(--text2)">무기 없음</div>`;
+  const atTypeMap: Record<string, string> = { ranged: "원거리", melee: "근접", artillery: "포격", special: "특수" };
+  const atType = atTypeMap[w.attackType] ?? w.attackType;
+  const rangeText = w.minRange === w.maxRange ? `${w.maxRange}` : `${w.minRange}~${w.maxRange}`;
+  const wname = WEAPON_NAME_KO[w.name ?? ""] ?? w.name ?? "";
+  const attrKo = TILE_ATTR_KO[w.attribute] ?? w.attribute;
+  const attrEffect = ATTR_EFFECT_KO[w.attribute] ?? "";
+
+  const EXTRA_DESC: Record<string, string> = {
+    knockback:      "넉백: 피격 유닛을 반대 방향으로 밀어냄",
+    splash:         "스플래시: 인접 타일에도 피해 적용",
+    rush:           "돌진: 목표 방향으로 이동 후 공격",
+    confusion:      "혼란: 적의 행동 방향을 무작위화",
+    applyTileEffect:"타일효과: 착탄 타일에 속성 부여",
+    penetrating:    "관통: 유닛을 통과하여 피해",
+    arcing:         "포물선: 포물선 궤도로 투사",
+  };
+  const extras: string[] = [];
+  if (w.knockback)      extras.push("knockback");
+  if (w.splash)         extras.push("splash");
+  if (w.rush)           extras.push("rush");
+  if (w.confusion)      extras.push("confusion");
+  if (w.applyTileEffect) extras.push("applyTileEffect");
+  if (w.penetrating)    extras.push("penetrating");
+  if (w.arcing)         extras.push("arcing");
+
+  const extrasHtml = extras.length > 0
+    ? `<div class="rtt-sep"></div>${extras.map(k => `<div class="rtt-extra-row">· ${EXTRA_DESC[k] ?? k}</div>`).join("")}`
+    : "";
+  const attrHtml = (w.attribute && w.attribute !== "none")
+    ? `<div class="rtt-sep"></div>
+       <div class="rtt-row"><span>속성</span><span class="rtt-val rtt-attr">${attrKo}</span></div>
+       ${attrEffect ? `<div class="rtt-extra-row">· ${attrEffect}</div>` : ""}`
+    : "";
+
+  return `
+    <div class="rtt-title">${wname}</div>
+    <div class="rtt-row"><span>유형</span><span class="rtt-val">${atType}</span></div>
+    <div class="rtt-row"><span>공격력</span><span class="rtt-val">${w.damage}</span></div>
+    <div class="rtt-row"><span>사거리</span><span class="rtt-val">${rangeText}</span></div>
+    ${attrHtml}
+    ${extrasHtml}
+  `;
 }
 
 function setupBoardClick(
@@ -2638,23 +3345,29 @@ function setupBoardClick(
 
     if (isSkillTarget && isMyTurn) {
       if (hoveredUnit) showHoverTooltip(e.clientX, e.clientY, hoveredUnit, false, false);
+      else hideHoverTooltip();
+      hideAttackPreviewCard();
       setCustomCursor(e.clientX, e.clientY, "attack"); // reuse attack cursor for skill targets
       newCanvas.style.cursor = "none";
     } else if (isAttackable && isMyTurn) {
-      showHoverTooltip(e.clientX, e.clientY, hoveredUnit!, true, false);
+      hideHoverTooltip();
+      showAttackPreviewCard(e.clientX, e.clientY, hoveredUnit);
       setCustomCursor(e.clientX, e.clientY, "attack");
       newCanvas.style.cursor = "none";
     } else if (isMoveable && isMyTurn) {
       hideHoverTooltip();
+      hideAttackPreviewCard();
       setCustomCursor(e.clientX, e.clientY, "move");
       newCanvas.style.cursor = "none";
     } else if (isEnemyNotAttackable) {
       showHoverTooltip(e.clientX, e.clientY, hoveredUnit!, false, false);
+      hideAttackPreviewCard();
       setCustomCursor(e.clientX, e.clientY, "no-attack");
       newCanvas.style.cursor = "none";
     } else {
       if (hoveredUnit) showHoverTooltip(e.clientX, e.clientY, hoveredUnit, false, false);
       else hideHoverTooltip();
+      hideAttackPreviewCard();
       setCustomCursor(0, 0, null);
       newCanvas.style.cursor = hoveredUnit ? "pointer" : (isMyTurn ? "default" : "default");
     }
@@ -2662,6 +3375,7 @@ function setupBoardClick(
 
   newCanvas.addEventListener("mouseleave", () => {
     hideHoverTooltip();
+    hideAttackPreviewCard();
     setCustomCursor(0, 0, null);
     hoveredTile = null;
     // animLoop will stop naturally once hoveredTile is null and anims finish
@@ -2688,13 +3402,30 @@ function setupBoardClick(
           { headers: { Authorization: `Bearer ${token}` } },
         ).then(r => r.ok ? r.json() : null)
           .then((data: { unitInfo?: UnitInfoData } | null) => {
-            if (data?.unitInfo) renderUnitInfoPanel(data.unitInfo);
+            if (data?.unitInfo) { renderUnitInfoPanel(data.unitInfo); renderBottomBar(data.unitInfo); }
           })
           .catch(() => {});
       }
     }
 
     if (!isMyTurn) return;
+
+    // Check if clicking a tile absorb selection target
+    if (tileAbsorbMode && skillTargetHighlights.some(t => t.row === row && t.col === col)) {
+      pendingAbsorbTile = { row, col };
+      tileAbsorbMode = false;
+      skillTargetHighlights = [];
+      renderBottomBar(lastUnitInfo);  // refresh button to "armed" state
+      rerenderBoardHighlights();
+      return;
+    }
+    // Cancel absorb mode if clicking elsewhere (not an absorb tile)
+    if (tileAbsorbMode) {
+      tileAbsorbMode = false;
+      skillTargetHighlights = [];
+      rerenderBoardHighlights();
+      // Don't return — allow other click logic to proceed
+    }
 
     // Check if clicking a skill target tile
     if (skillTargetingSkillId !== null && skillTargetHighlights.some(t => t.row === row && t.col === col)) {
@@ -2708,7 +3439,14 @@ function setupBoardClick(
     // Check if clicking a highlighted attack target
     if (attackTargetHighlights.some(t => t.row === row && t.col === col)) {
       if (selectedUnitId !== null) {
-        void submitAction({ type: "attack", unitId: selectedUnitId, targetPosition: { row, col } });
+        // Include pre-selected absorb tile if available
+        const absorbOpt = pendingAbsorbTile !== null
+          ? { sourceTile: pendingAbsorbTile }
+          : {};
+        const weaponOpt = activeWeaponId ? { weaponId: activeWeaponId } : {};
+        void submitAction({ type: "attack", unitId: selectedUnitId, targetPosition: { row, col }, ...absorbOpt, ...weaponOpt });
+        activeWeaponId = null;
+        pendingAbsorbTile = null;
         clearUnitSelection();
         return;
       }
@@ -2733,7 +3471,7 @@ function setupBoardClick(
       if (selectedUnitId === clickedUnit.unitId) {
         // Click same unit again: deselect
         clearUnitSelection();
-        // Re-render without highlights
+        // Re-render without highlights — MUST pass availW/availH to avoid canvas resize
         const playerIds = Object.keys(state.players);
         const unitsArr = Object.values(state.units).map((u) => ({
           metaId: u.metaId as string, playerId: u.playerId as string,
@@ -2742,7 +3480,7 @@ function setupBoardClick(
           currentHealth: u.currentHealth as number,
         }));
         renderIso(newCanvas, {
-          gridSize,
+          gridSize, availW, availH,
           baseTile: state.map.baseTile ?? "plain",
           tiles: state.map.tiles as unknown as Record<string, { attribute: string }>,
           units: unitsArr, playerIds,
@@ -2757,7 +3495,7 @@ function setupBoardClick(
     // Click enemy or empty tile with no selection: deselect
     if (selectedUnitId !== null) {
       clearUnitSelection();
-      // Re-render without highlights
+      // Re-render without highlights — MUST pass availW/availH to avoid canvas resize
       const playerIds = Object.keys(state.players);
       const unitsArr = Object.values(state.units).map((u) => ({
         metaId: u.metaId as string, playerId: u.playerId as string,
@@ -2766,7 +3504,7 @@ function setupBoardClick(
         currentHealth: u.currentHealth as number,
       }));
       renderIso(newCanvas, {
-        gridSize,
+        gridSize, availW, availH,
         baseTile: state.map.baseTile ?? "plain",
         tiles: state.map.tiles as unknown as Record<string, { attribute: string }>,
         units: unitsArr, playerIds,
@@ -2810,6 +3548,16 @@ function renderLog(): void {
 function showGameOver(winnerIds: string[], reason: string): void {
   stopPolling(); // game is over — no more polling needed
   ws.disconnect();
+
+  // Clear all unit selection state and overlays
+  clearUnitSelection();
+  renderUnitInfoPanel(null);
+  const customCursor = document.getElementById("custom-cursor");
+  if (customCursor) customCursor.className = "";
+  const hovTip = document.getElementById("unit-hover-tip");
+  if (hovTip) hovTip.style.display = "none";
+  const unitOrderOverlay = document.getElementById("unit-order-overlay");
+  if (unitOrderOverlay) unitOrderOverlay.classList.add("hidden");
 
   const container = document.getElementById("game-over-container");
   const msg = document.getElementById("game-over-msg");
@@ -2859,10 +3607,14 @@ function showUnitOrderDraft(aliveUnitIds: string[], timeoutMs: number): void {
       // Unit display info — use the shared UNIT_NAME_KO / UNIT_ABBR maps
       const metaId = unit.metaId as string;
       const unitName = UNIT_NAME_KO[metaId] ?? UNIT_ABBR[metaId] ?? metaId;
+      const orderPortrait = portraitPath(metaId);
+      const orderPortraitHtml = orderPortrait
+        ? `<img class="unit-order-portrait" src="${orderPortrait}" alt="${unitName}" />`
+        : `<span class="unit-order-icon">${getUnitEmoji(metaId)}</span>`;
 
       item.innerHTML = `
         <span class="unit-order-num">${idx + 1}</span>
-        <span class="unit-order-icon">${getUnitEmoji(metaId)}</span>
+        ${orderPortraitHtml}
         <span class="unit-order-name">${unitName}</span>
         <span class="unit-order-hp">HP ${unit.currentHealth}</span>
         <span class="unit-order-drag">⠿</span>
@@ -2992,6 +3744,29 @@ document.getElementById("ready-btn")?.addEventListener("click", () => {
   void submitPlacement();
 });
 
+// Waiting room
+document.getElementById("wr-ready-btn")?.addEventListener("click", () => {
+  if (!currentGameId) return;
+  isPlayerReady = !isPlayerReady;
+  ws.sendSetReady(currentGameId, humanPlayerId, isPlayerReady);
+  // Optimistic UI
+  const btn = document.getElementById("wr-ready-btn") as HTMLButtonElement | null;
+  if (btn) {
+    btn.textContent = isPlayerReady ? "⏸ 준비 취소" : "✅ 준비 완료";
+    btn.className = `wr-ready-btn ${isPlayerReady ? "cancel" : "confirm"}`;
+  }
+});
+
+document.getElementById("wr-leave-btn")?.addEventListener("click", () => {
+  stopPolling();
+  ws.disconnect();
+  currentGameId = null;
+  isPlayerReady = false;
+  currentRoomStatus = null;
+  sessionStorage.removeItem("ab_game_id");
+  showScreen("screen-menu");
+});
+
 document.getElementById("pass-btn")?.addEventListener("click", () => {
   clearUnitSelection();
   void submitAction({ type: "pass" });
@@ -3015,7 +3790,6 @@ async function tryRestoreSession(): Promise<void> {
   const savedGameId = sessionStorage.getItem("ab_game_id");
   if (!savedGameId) return;
 
-  const token = api.getToken();
   // Re-authenticate with the persisted player ID to get a fresh token
   try {
     await api.login(humanPlayerId);
@@ -3043,26 +3817,84 @@ async function tryRestoreSession(): Promise<void> {
     currentGameId = savedGameId;
     const pState = data.state?.players?.[humanPlayerId];
     if (pState !== undefined) humanTeamIndex = pState.teamIndex;
-
-    showScreen("screen-game");
     if (data.state) {
       lastGameState = data.state;
-      renderGame(data.state);
     }
 
-    // Reconnect WS then start polling
-    ws.connect(WS_BASE, savedGameId, humanPlayerId, {
-      token: api.getToken() ?? "",
-      onJoined: () => { addLog("게임 재접속 완료"); },
-      onStateUpdate: (state) => {
-        lastGameState = state;
-        if (state.phase === "battle" || state.phase === "result") renderGame(state);
-      },
-      onGameEnd: (winnerIds, reason) => { showGameOver(winnerIds, reason); },
-      onUnitOrderRequest: (aliveUnitIds, timeoutMs) => { showUnitOrderDraft(aliveUnitIds, timeoutMs); },
-    });
-    pollGameState(savedGameId);
-    addLog(`세션 복원: ${savedGameId}`);
+    // Resolve game mode from map ID so openPlacementScreen() can work
+    const mapId = data.state?.map?.mapId;
+    if (mapId && !currentMode) {
+      const mode = (gameModes.modes as GameMode[]).find((m) => m.mapId === mapId);
+      if (mode) currentMode = mode;
+    }
+
+    if (data.state?.phase === "battle" || data.state?.phase === "result") {
+      // Battle/result phase: show game screen
+      showScreen("screen-game");
+      if (data.state) renderGame(data.state);
+
+      ws.connect(WS_BASE, savedGameId, humanPlayerId, {
+        token: api.getToken() ?? "",
+        onJoined: () => { addLog("게임 재접속 완료"); },
+        onStateUpdate: (state) => {
+          lastGameState = state;
+          if (state.phase === "battle" || state.phase === "result") renderGame(state);
+        },
+        onGameEnd: (winnerIds, reason) => { showGameOver(winnerIds, reason); },
+        onUnitOrderRequest: (aliveUnitIds, timeoutMs) => { showUnitOrderDraft(aliveUnitIds, timeoutMs); },
+      });
+      pollGameState(savedGameId);
+      addLog(`세션 복원: ${savedGameId}`);
+    } else if (data.status === "waiting") {
+      // Waiting/placement phase: show waiting room
+      ws.connect(WS_BASE, savedGameId, humanPlayerId, {
+        token: api.getToken() ?? "",
+        onJoined: () => { addLog("게임 재접속 완료"); },
+        onStateUpdate: (state) => {
+          lastGameState = state;
+          if (state.phase === "battle" || state.phase === "result") renderGame(state);
+        },
+        onGameEnd: (winnerIds, reason) => { showGameOver(winnerIds, reason); },
+        onUnitOrderRequest: (aliveUnitIds, timeoutMs) => { showUnitOrderDraft(aliveUnitIds, timeoutMs); },
+        onRoomStatus: (roomData) => {
+          currentRoomStatus = roomData;
+          if (document.getElementById("screen-waiting-room")?.classList.contains("active")) {
+            renderWaitingRoom(roomData);
+          }
+          if (roomData.allReady && !document.getElementById("screen-placement")?.classList.contains("active")) {
+            void openPlacementScreen(currentGameId!);
+          }
+        },
+        onPlacementSelections: (selections) => {
+          teammateSelections = selections;
+          const maxUnits = currentMode?.maxUnitsPerPlayer ?? 3;
+          renderUnitCards(maxUnits);
+          renderTeamSelectionBar();
+        },
+      });
+      pollGameState(savedGameId);
+      addLog(`세션 복원: ${savedGameId}`);
+      isPlayerReady = false;
+      showScreen("screen-waiting-room");
+      renderWaitingRoomShell(savedGameId);
+    } else {
+      // Fallback: show game screen
+      showScreen("screen-game");
+      if (data.state) renderGame(data.state);
+
+      ws.connect(WS_BASE, savedGameId, humanPlayerId, {
+        token: api.getToken() ?? "",
+        onJoined: () => { addLog("게임 재접속 완료"); },
+        onStateUpdate: (state) => {
+          lastGameState = state;
+          if (state.phase === "battle" || state.phase === "result") renderGame(state);
+        },
+        onGameEnd: (winnerIds, reason) => { showGameOver(winnerIds, reason); },
+        onUnitOrderRequest: (aliveUnitIds, timeoutMs) => { showUnitOrderDraft(aliveUnitIds, timeoutMs); },
+      });
+      pollGameState(savedGameId);
+      addLog(`세션 복원: ${savedGameId}`);
+    }
   } catch {
     sessionStorage.removeItem("ab_game_id");
   }
@@ -3082,9 +3914,16 @@ api.fetchTileMetas().then((metas) => {
 
 // ─── 창 크기 변경 시 게임 보드 재렌더링 ───────────────────────────────────────
 // ResizeObserver로 board-wrap 크기 변화를 감지해 캔버스를 즉시 재렌더링
-const boardWrapEl = document.querySelector(".board-wrap");
+const boardWrapEl = document.querySelector(".board-wrap") as HTMLElement | null;
 if (boardWrapEl) {
   new ResizeObserver(() => {
+    // 실제 컨테이너 크기가 바뀐 경우에만 캐시를 갱신 (ResizeObserver만 갱신 권한을 가짐)
+    const w = boardWrapEl.clientWidth;
+    const h = boardWrapEl.clientHeight;
+    if (w > 0 && h > 0) {
+      animGridParams.availW = w;
+      animGridParams.availH = h;
+    }
     if (lastGameState && document.getElementById("screen-game")?.classList.contains("active")) {
       renderGame(lastGameState);
     }

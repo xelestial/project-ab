@@ -20,6 +20,8 @@ export const AttackActionSchema = BaseActionSchema.extend({
   target: PositionSchema,
   /** For r1 adjacent tile absorb — the tile to absorb attribute from */
   sourceTile: PositionSchema.optional(),
+  /** Override weapon (e.g. secondary weapon attack) */
+  weaponId: MetaIdSchema.optional(),
 });
 
 export const SkillActionSchema = BaseActionSchema.extend({

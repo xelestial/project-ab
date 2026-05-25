@@ -50,6 +50,12 @@ export const ClientMessageSchema = z.discriminatedUnion("type", [
     /** metaIds the player has placed OR currently has selected */
     metaIds: z.array(z.string()),
   }),
+  z.object({
+    type: z.literal("set_ready"),
+    gameId: z.string(),
+    playerId: z.string(),
+    ready: z.boolean(),
+  }),
 ]);
 
 export type ClientMessage = z.infer<typeof ClientMessageSchema>;
@@ -120,6 +126,18 @@ export const ServerMessageSchema = z.discriminatedUnion("type", [
     type: z.literal("placement_selections"),
     gameId: z.string(),
     selections: z.record(z.string(), z.array(z.string())),
+  }),
+  z.object({
+    type: z.literal("room_status"),
+    gameId: z.string(),
+    players: z.array(z.object({
+      playerId: z.string(),
+      ready: z.boolean(),
+      isAi: z.boolean(),
+      teamIndex: z.number(),
+    })),
+    expectedPlayerCount: z.number(),
+    allReady: z.boolean(),
   }),
 ]);
 

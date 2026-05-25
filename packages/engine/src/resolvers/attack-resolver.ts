@@ -125,27 +125,33 @@ export class AttackResolver implements IAttackResolver {
     }
 
     // ── Phase 0c: Attacker passive tile absorb (passive_tile_absorb_attack) ───
+    // sourceTile = player-selected adjacent tile; fallback = attacker's own tile.
     if (!weapon.adjacentTileAbsorb) {
-      const { attr: absorbedAttr, absorbed } = this.resolveEffectiveAttribute(weapon, attacker, state);
-      if (absorbed) {
+      const { attr: absorbedAttr, absorbed, tilePos: absorbedTilePos } = this.resolveEffectiveAttribute(
+        weapon, attacker, state, options?.sourceTile,
+      );
+      if (absorbed && absorbedTilePos !== undefined) {
         effectiveAttr = absorbedAttr;
         tileAbsorbed = true;
-        const attackerTileAttr = getTileAttribute(state, attacker.position);
+        const absorbTileAttr = getTileAttribute(state, absorbedTilePos);
         changes.push({
           type: "tile_attribute_change",
-          position: attacker.position,
-          from: attackerTileAttr,
+          position: absorbedTilePos,
+          from: absorbTileAttr,
           to: "plain",
           causedBy: { attackerId: attacker.unitId, attribute: effectiveAttr },
         });
-        const matchingEffect = attacker.activeEffects.find((e) => e.effectType === effectiveAttr);
-        if (matchingEffect !== undefined) {
-          changes.push({
-            type: "unit_effect_remove",
-            unitId: attacker.unitId,
-            effectId: matchingEffect.effectId,
-            effectType: matchingEffect.effectType,
-          });
+        // Remove status effect only when absorbing the attacker's own tile
+        if (posEqual(absorbedTilePos, attacker.position)) {
+          const matchingEffect = attacker.activeEffects.find((e) => e.effectType === effectiveAttr);
+          if (matchingEffect !== undefined) {
+            changes.push({
+              type: "unit_effect_remove",
+              unitId: attacker.unitId,
+              effectId: matchingEffect.effectId,
+              effectType: matchingEffect.effectType,
+            });
+          }
         }
       }
     }
@@ -520,16 +526,20 @@ export class AttackResolver implements IAttackResolver {
     weapon: WeaponMeta,
     attacker: UnitState,
     state: GameState,
-  ): { attr: AttackAttribute; absorbed: boolean } {
+    sourceTile?: Position,
+  ): { attr: AttackAttribute; absorbed: boolean; tilePos?: Position } {
     const passives = this.registry.getUnitPassives(attacker.metaId as string);
     const hasTileAbsorb = passives.some((p) =>
       p.actions.some((a) => a.type === "absorb_tile_at_attacker"),
     );
     if (hasTileAbsorb) {
-      const tileAttr = getTileAttribute(state, attacker.position);
+      // Player may pre-select an adjacent tile via the skill UI (sourceTile).
+      // Fall back to the attacker's own tile when no tile was selected.
+      const tilePos = sourceTile ?? attacker.position;
+      const tileAttr = getTileAttribute(state, tilePos);
       const mapped = TILE_TO_ATTACK_ATTR[tileAttr];
       if (mapped !== undefined) {
-        return { attr: mapped, absorbed: true };
+        return { attr: mapped, absorbed: true, tilePos };
       }
     }
     return { attr: weapon.attribute, absorbed: false };

@@ -166,13 +166,19 @@ export class AttackValidator implements IAttackValidator {
     }
 
     switch (weapon.attackType) {
-      case "melee":
-        // Melee: target must be adjacent (minRange=1, maxRange=1 enforced above)
+      case "melee": {
+        // Melee: target tile must not be impassable (mountain/river)
+        const meleeTile = getTileAttribute(state, target);
+        if (meleeTile === "mountain" || meleeTile === "river") return invalid(ErrorCode.ATTACK_INVALID_TARGET);
         return VALID;
+      }
 
-      case "ranged":
-        // Ranged: free targeting — no LOS check (confirmed rule)
+      case "ranged": {
+        // Ranged: target tile must not be impassable
+        const rangedTile = getTileAttribute(state, target);
+        if (rangedTile === "mountain" || rangedTile === "river") return invalid(ErrorCode.ATTACK_INVALID_TARGET);
         return VALID;
+      }
 
       case "artillery":
         // Artillery: must have at least one unit/object between attacker and target

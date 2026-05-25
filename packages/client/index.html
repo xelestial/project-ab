@@ -54,7 +54,8 @@
     /* 비게임 화면은 패딩·max-width 유지, 세로 스크롤 허용 */
     #screen-menu.active,
     #screen-lobby.active,
-    #screen-placement.active {
+    #screen-placement.active,
+    #screen-waiting-room.active {
       height: 100%;
       overflow-y: auto;
       padding: 1.5rem 2rem;
@@ -400,31 +401,19 @@
       overflow: hidden;
     }
 
-    /* Left: round/turn/pass */
+    /* Left: round/turn */
     .hud-meta {
       display: flex;
       flex-direction: column;
       justify-content: center;
       gap: 2px;
       padding: 0 14px;
-      min-width: 140px;
+      min-width: 120px;
       border-right: 1px solid var(--border);
       flex-shrink: 0;
     }
     .hud-round { font-size: 0.72rem; color: var(--text2); text-transform: uppercase; letter-spacing: 0.06em; }
     .hud-turn-label { font-size: 0.95rem; font-weight: 700; color: var(--accent); white-space: nowrap; }
-    .hud-pass-btn {
-      margin-top: 4px;
-      background: none;
-      border: 1px solid var(--border);
-      color: var(--text2);
-      border-radius: 5px;
-      padding: 2px 8px;
-      font-size: 0.72rem;
-      cursor: pointer;
-      text-align: left;
-    }
-    .hud-pass-btn:hover { border-color: var(--accent); color: var(--accent); }
 
     /* Center: unit cards */
     .hud-units {
@@ -535,9 +524,11 @@
       image-rendering: pixelated;
     }
     #board-canvas {
-      display: block;
-      max-width: 100%;
-      max-height: 100%;
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      /* Out of document flow → does not affect board-wrap size → no oscillation */
     }
 
     /* ── Unit info floating panel (click on board unit) ── */
@@ -651,6 +642,7 @@
     .weapon-type.weapon-melee { background: #b71c1c22; color: #f44336; border: 1px solid #f44336; }
     .weapon-type.weapon-ranged { background: #0d47a122; color: #2196f3; border: 1px solid #2196f3; }
     .weapon-type.weapon-artillery { background: #e65100aa; color: #ff9800; border: 1px solid #ff9800; }
+    .weapon-type.weapon-special   { background: #6a1b9a44; color: #ce93d8; border: 1px solid #ce93d8; }
     .unit-info-effects { display: flex; flex-wrap: wrap; gap: 3px; margin-bottom: 4px; min-height: 18px; }
     .effect-badge { padding: 1px 5px; border-radius: 3px; font-size: 10px; background: var(--border); }
     .effect-fire { background: #b71c1c44; color: #f44336; }
@@ -729,6 +721,67 @@
       border-top: 1px solid var(--border); padding-top: 4px; margin-top: 3px;
     }
 
+    /* ── Attack preview card ── */
+    #attack-preview-card {
+      display: none;
+      position: fixed;
+      z-index: 9998;
+      pointer-events: none;
+      background: rgba(60,8,8,0.93);
+      border: 1.5px solid rgba(248,81,73,0.65);
+      border-radius: 10px;
+      padding: 8px;
+      width: 148px;
+      flex-direction: column;
+      gap: 5px;
+      box-shadow: 0 4px 18px rgba(0,0,0,0.65), 0 0 12px rgba(248,81,73,0.25);
+    }
+    .apc-portrait {
+      width: 100%;
+      aspect-ratio: 404 / 460;
+      object-fit: cover;
+      object-position: center top;
+      border-radius: 6px;
+      border: 1px solid rgba(248,81,73,0.35);
+    }
+    .apc-portrait-fallback {
+      width: 100%; height: 72px;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(255,255,255,0.04); border-radius: 6px;
+      font-size: 22px; font-weight: 700; color: #f85149;
+    }
+    .apc-name { font-size: 0.8rem; font-weight: 700; color: #fff; }
+    .apc-hp-row { display: flex; align-items: center; gap: 5px; }
+    .apc-hp-bar { flex: 1; height: 5px; background: rgba(255,255,255,0.1); border-radius: 3px; overflow: hidden; }
+    .apc-hp-fill { height: 100%; border-radius: 3px; transition: width 0.2s; }
+    .apc-hp-text { font-size: 0.6rem; color: var(--text2); white-space: nowrap; }
+    .apc-armor { font-size: 0.62rem; color: #aaa; }
+    .apc-hint { font-size: 0.63rem; color: #f85149; font-weight: 700; text-align: center;
+      border-top: 1px solid rgba(248,81,73,0.25); padding-top: 4px; }
+
+    /* ── Rich tooltip ── */
+    #rich-tooltip {
+      display: none;
+      position: fixed;
+      z-index: 9999;
+      pointer-events: none;
+      background: rgba(13,17,23,0.98);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 9px 12px;
+      font-size: 0.72rem;
+      max-width: 250px;
+      min-width: 160px;
+      box-shadow: 0 4px 18px rgba(0,0,0,0.65);
+      color: var(--text);
+    }
+    .rtt-title { font-weight: 700; font-size: 0.82rem; margin-bottom: 5px; color: var(--accent); }
+    .rtt-sep { height: 1px; background: var(--border); margin: 5px 0; }
+    .rtt-row { display: flex; justify-content: space-between; gap: 8px; color: var(--text2); margin-bottom: 2px; }
+    .rtt-row .rtt-val { color: var(--text); font-weight: 600; }
+    .rtt-attr { color: #ffd54f !important; }
+    .rtt-extra-row { font-size: 0.67rem; color: var(--text2); line-height: 1.5; }
+
     /* ── Unit Order Draft overlay ── */
     #unit-order-overlay {
       position: fixed; inset: 0; z-index: 200;
@@ -769,6 +822,12 @@
       min-width: 18px;
     }
     .unit-order-icon { font-size: 1.2rem; }
+    .unit-order-portrait {
+      width: 36px; height: 36px;
+      border-radius: 4px;
+      object-fit: cover; object-position: center top;
+      flex-shrink: 0;
+    }
     .unit-order-name { flex: 1; font-weight: 600; font-size: 0.85rem; }
     .unit-order-hp { font-size: 0.75rem; color: var(--success); }
     .unit-order-drag { color: var(--text2); font-size: 1rem; }
@@ -1047,6 +1106,228 @@
       margin: 1.2rem 0 0.6rem;
     }
 
+    /* ── Bottom Action Bar (XCOM style) ── */
+    #bottom-action-bar {
+      flex-shrink: 0;
+      height: 78px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 12px;
+      background: rgba(22, 27, 34, 0.97);
+      border-top: 2px solid var(--border);
+    }
+
+    /* Pass button area */
+    #bottom-pass-area {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0 8px;
+    }
+    #pass-btn {
+      background: linear-gradient(135deg, #388bfd 0%, #1a6ed8 100%);
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      padding: 12px 22px;
+      font-size: 0.95rem;
+      font-weight: 800;
+      cursor: pointer;
+      transition: opacity 0.15s, transform 0.1s, box-shadow 0.15s;
+      white-space: nowrap;
+      letter-spacing: 0.04em;
+      box-shadow: 0 3px 12px rgba(56,139,253,0.4);
+    }
+    #pass-btn:hover { opacity: 0.9; transform: translateY(-1px); box-shadow: 0 5px 16px rgba(56,139,253,0.55); }
+    #pass-btn:active { transform: translateY(0); }
+
+    /* Passive skills center */
+    #bottom-passives {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 0 8px;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+    #bottom-passives::-webkit-scrollbar { display: none; }
+    .bottom-passive-badge {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+      padding: 5px 10px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      min-width: 72px;
+      text-align: center;
+      cursor: default;
+      transition: border-color 0.15s;
+    }
+    .bottom-passive-badge:hover { border-color: var(--accent); }
+    /* CSS tooltip for passives */
+    .bottom-passive-badge::after {
+      content: attr(data-tooltip);
+      position: absolute;
+      bottom: calc(100% + 8px);
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(13,17,23,0.97);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 5px 9px;
+      border-radius: 7px;
+      font-size: 0.68rem;
+      white-space: nowrap;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.15s;
+      z-index: 200;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.5);
+    }
+    .bottom-passive-badge:hover::after { opacity: 1; }
+    .bottom-passive-icon { font-size: 1.1rem; line-height: 1; }
+    .bottom-passive-name { font-size: 0.62rem; color: var(--text); font-weight: 700; white-space: nowrap; }
+    .bottom-passive-trigger { font-size: 0.58rem; color: var(--text2); white-space: nowrap; }
+    .bottom-no-passive { color: var(--text2); font-size: 0.75rem; font-style: italic; }
+
+    /* Active skill slots (between passives and weapons) */
+    #bottom-skills {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 0 8px;
+      border-left: 1px solid var(--border);
+      border-right: 1px solid var(--border);
+      height: 100%;
+    }
+    .bottom-skill-btn {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 3px;
+      padding: 6px 12px;
+      min-width: 76px;
+      height: 58px;
+      background: rgba(255, 170, 50, 0.07);
+      border: 1.5px solid rgba(255,170,50,0.35);
+      border-radius: 9px;
+      color: #ffc050;
+      cursor: pointer;
+      font-size: 0.62rem;
+      font-weight: 700;
+      transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
+      white-space: nowrap;
+      position: relative;
+    }
+    .bottom-skill-btn:hover:not(:disabled) {
+      background: rgba(255,170,50,0.15);
+      border-color: rgba(255,170,50,0.75);
+      box-shadow: 0 0 10px rgba(255,170,50,0.25);
+    }
+    .bottom-skill-btn:disabled { opacity: 0.38; cursor: not-allowed; }
+    .bottom-skill-btn.skill-armed {
+      background: rgba(255,170,50,0.22);
+      border-color: #ffaa32;
+      box-shadow: 0 0 12px rgba(255,170,50,0.4);
+      color: #ffe090;
+    }
+    .bottom-skill-btn-icon { font-size: 1.2rem; line-height: 1; }
+    .bottom-skill-btn-label { font-size: 0.6rem; text-align: center; }
+    .bottom-skill-btn-status { font-size: 0.57rem; color: rgba(255,220,100,0.85); text-align: center; }
+    /* Tooltip for skill buttons */
+    .bottom-skill-btn::after {
+      content: attr(data-tooltip);
+      position: absolute;
+      bottom: calc(100% + 8px);
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(13,17,23,0.97);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 5px 9px;
+      border-radius: 7px;
+      font-size: 0.68rem;
+      white-space: nowrap;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.15s;
+      z-index: 200;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.5);
+    }
+    .bottom-skill-btn:hover::after { opacity: 1; }
+
+    /* Weapon slots */
+    #bottom-weapons {
+      flex-shrink: 0;
+      display: flex;
+      gap: 8px;
+      align-items: stretch;
+      height: 62px;
+    }
+    .bottom-weapon-slot {
+      width: 148px;
+      background: var(--surface);
+      border: 1.5px solid var(--border);
+      border-radius: 10px;
+      padding: 6px 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      transition: border-color 0.15s, box-shadow 0.15s;
+      overflow: hidden;
+    }
+    .bottom-weapon-slot.bws-active {
+      border-color: rgba(88,166,255,0.6);
+      background: rgba(88,166,255,0.06);
+    }
+    .bottom-weapon-slot.bws-selected {
+      border-color: #ffc050;
+      background: rgba(255,192,80,0.1);
+      box-shadow: 0 0 8px rgba(255,192,80,0.35);
+    }
+    #undo-move-btn {
+      background: linear-gradient(135deg, #555 0%, #333 100%);
+      color: #ccc;
+      border: 1px solid #666;
+      border-radius: 8px;
+      padding: 8px 14px;
+      font-size: 0.82rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: opacity 0.15s, box-shadow 0.15s;
+      white-space: nowrap;
+      margin-right: 6px;
+    }
+    #undo-move-btn:hover { opacity: 0.85; box-shadow: 0 0 8px rgba(150,150,150,0.4); }
+    .bws-label {
+      font-size: 0.58rem;
+      color: var(--text2);
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      font-weight: 700;
+    }
+    .bws-empty { color: var(--text2); font-size: 0.72rem; font-style: italic; }
+    .bws-name { font-size: 0.72rem; font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .bws-type-row { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+    .bws-stats { font-size: 0.62rem; color: var(--text2); }
+    .bws-attr { font-size: 0.6rem; padding: 1px 4px; border-radius: 3px; font-weight: 600; }
+    .bws-attr-electric { background: #f57f1744; color: #ffd54f; border: 1px solid #ffd54f55; }
+    .bws-attr-ice      { background: #01579b44; color: #29b6f6; border: 1px solid #29b6f655; }
+    .bws-attr-fire     { background: #b71c1c44; color: #f44336; border: 1px solid #f4433655; }
+    .bws-attr-water    { background: #0d47a144; color: #64b5f6; border: 1px solid #64b5f655; }
+    .bws-attr-acid     { background: #1b5e2044; color: #a5d65a; border: 1px solid #a5d65a55; }
+    .bws-attr-sand     { background: #4e342e44; color: #ffcc80; border: 1px solid #ffcc8055; }
+    .bws-badges { display: flex; gap: 3px; flex-wrap: wrap; margin-top: 1px; }
+    .bws-badge { font-size: 0.55rem; padding: 1px 4px; border-radius: 3px; background: var(--surface2); color: var(--text2); border: 1px solid var(--border); }
+
     /* ── Util ── */
     .hidden { display: none !important; }
     .tag {
@@ -1078,6 +1359,237 @@
     .skill-btn:hover:not(:disabled) { background: rgba(160, 80, 255, 0.35); border-color: #c084fc; }
     .skill-btn-disabled { opacity: 0.4; cursor: not-allowed; }
     .skill-row.skill-used .skill-btn { opacity: 0.4; }
+
+    /* ═══════════════════════ WAITING ROOM ═══════════════════════ */
+    #screen-waiting-room {
+      display: none;
+      flex-direction: column;
+      min-height: 100vh;
+      background: #0e1117;
+      color: #e6edf3;
+      padding: 0;
+    }
+    #screen-waiting-room.active { display: flex; }
+
+    .wr-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 24px;
+      background: #161b22;
+      border-bottom: 1px solid #30363d;
+      flex-shrink: 0;
+    }
+    .wr-title {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: #4fc3f7;
+      letter-spacing: .5px;
+    }
+    .wr-meta {
+      display: flex;
+      gap: 8px;
+      margin-left: auto;
+    }
+    .wr-meta-badge {
+      background: #21262d;
+      border: 1px solid #30363d;
+      border-radius: 4px;
+      padding: 3px 8px;
+      font-size: .75rem;
+      color: #8b949e;
+    }
+    #wr-leave-btn {
+      margin-left: 8px;
+      background: transparent;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      color: #8b949e;
+      padding: 5px 14px;
+      cursor: pointer;
+      font-size: .85rem;
+      transition: border-color .15s, color .15s;
+    }
+    #wr-leave-btn:hover { border-color: #e53935; color: #e53935; }
+
+    .wr-body {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 32px 24px;
+      gap: 28px;
+    }
+
+    #wr-player-slots { width: 100%; max-width: 720px; }
+
+    .wr-teams-grid {
+      display: grid;
+      grid-template-columns: repeat(var(--team-count, 2), 1fr);
+      gap: 16px;
+    }
+
+    .wr-team-col {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .wr-team-header {
+      font-size: .7rem;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      padding-bottom: 6px;
+      border-bottom: 2px solid currentColor;
+      opacity: .85;
+    }
+    .wr-player-slot {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      padding: 12px 14px;
+      transition: border-color .2s, background .2s;
+    }
+    .wr-player-slot.ready {
+      border-color: #238636;
+      background: #0d1117;
+    }
+    .wr-player-slot.me {
+      border-width: 2px;
+    }
+    .wr-avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      border: 2px solid transparent;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: .85rem;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+    .wr-slot-info {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      min-width: 0;
+    }
+    .wr-player-name {
+      font-size: .9rem;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      color: #e6edf3;
+    }
+    .wr-ready-badge {
+      font-size: .72rem;
+      font-weight: 600;
+      color: #e3b341;
+    }
+    .wr-ready-badge.ready { color: #56d364; }
+    .wr-loading { color: #8b949e; text-align: center; padding: 24px; }
+
+    .wr-footer {
+      padding: 20px 24px;
+      background: #161b22;
+      border-top: 1px solid #30363d;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      flex-shrink: 0;
+    }
+    .wr-status { font-size: .85rem; color: #8b949e; }
+    .wr-status.ok { color: #56d364; font-weight: 600; }
+
+    .wr-ready-btn {
+      padding: 12px 48px;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 700;
+      cursor: pointer;
+      border: none;
+      transition: opacity .15s, transform .1s;
+      letter-spacing: .5px;
+    }
+    .wr-ready-btn:active { transform: scale(.97); }
+    .wr-ready-btn.confirm { background: #238636; color: #fff; }
+    .wr-ready-btn.confirm:hover { background: #2ea043; }
+    .wr-ready-btn.cancel { background: #21262d; color: #e3b341; border: 1px solid #e3b341; }
+    .wr-ready-btn.cancel:hover { background: #e3b34122; }
+
+    /* ═══════════════════════ PLACEMENT TEAM BAR ═══════════════════════ */
+    #placement-team-bar {
+      display: none;
+      align-items: center;
+      gap: 16px;
+      background: #161b22;
+      border-bottom: 1px solid #30363d;
+      padding: 8px 16px;
+      flex-wrap: wrap;
+    }
+    .ptb-teammate {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: #21262d;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      padding: 6px 10px;
+    }
+    .ptb-avatar {
+      width: 28px; height: 28px;
+      border-radius: 50%;
+      border: 2px solid #4fc3f755;
+      background: #161b22;
+      display: flex; align-items: center; justify-content: center;
+      font-size: .65rem; font-weight: 700; color: #4fc3f7;
+      flex-shrink: 0;
+    }
+    .ptb-name {
+      font-size: .72rem;
+      color: #8b949e;
+      white-space: nowrap;
+    }
+    .ptb-units { display: flex; gap: 4px; align-items: center; }
+    .ptb-unit-portrait {
+      width: 28px; height: 28px; border-radius: 4px; overflow: hidden;
+      border: 1px solid #30363d;
+    }
+    .ptb-unit-portrait img { width: 100%; height: 100%; object-fit: cover; }
+    .ptb-fallback {
+      display: flex; align-items: center; justify-content: center;
+      font-size: .6rem; font-weight: 700; color: #fff; border-radius: 4px;
+    }
+    .ptb-none { font-size: .7rem; color: #484f58; font-style: italic; }
+    .ptb-divider { color: #30363d; font-size: 1.2rem; line-height: 1; }
+
+    /* Unit card teammate overlay */
+    .unit-card.teammate-taken {
+      position: relative;
+      opacity: 0.55;
+    }
+    .unit-card.teammate-taken::after {
+      content: attr(data-taken-by);
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(14,17,23,0.72);
+      color: #e3b341;
+      font-size: .65rem;
+      font-weight: 700;
+      border-radius: inherit;
+      text-align: center;
+      padding: 2px;
+    }
   </style>
 </head>
 <body>
@@ -1086,6 +1598,10 @@
 
   <!-- Global hover tooltip -->
   <div id="hover-tooltip"></div>
+  <!-- Attack target preview card (shown on mouseover of red attack tiles) -->
+  <div id="attack-preview-card"></div>
+  <!-- Rich tooltip (weapon/attribute/skill hover in bottom bar) -->
+  <div id="rich-tooltip"></div>
 
   <!-- Unit Order Draft overlay (shown at start of each round) -->
   <div id="unit-order-overlay" class="hidden">
@@ -1146,11 +1662,35 @@
       <div class="status-msg" id="lobby-status"></div>
     </div>
 
+    <!-- ─── Waiting Room ─────────────────────────────────── -->
+    <div id="screen-waiting-room" class="screen">
+      <div class="wr-header">
+        <span class="wr-title">⚔️ PROJECT AB — 대기실</span>
+        <div class="wr-meta">
+          <span class="wr-meta-badge" id="wr-map-name">—</span>
+          <span class="wr-meta-badge" id="wr-player-count">—</span>
+          <span class="wr-meta-badge" style="font-family:monospace;font-size:.7rem" id="wr-game-id">—</span>
+        </div>
+        <button id="wr-leave-btn">← 나가기</button>
+      </div>
+      <div class="wr-body">
+        <div id="wr-player-slots">
+          <div class="wr-loading">연결 중...</div>
+        </div>
+      </div>
+      <div class="wr-footer">
+        <div class="wr-status" id="wr-status-msg">플레이어를 기다리는 중...</div>
+        <button class="wr-ready-btn confirm" id="wr-ready-btn">✅ 준비 완료</button>
+      </div>
+    </div>
+
     <!-- Placement Screen -->
     <div id="screen-placement" class="screen">
       <div class="lobby-header">
         <h2 id="placement-title">유닛 배치</h2>
       </div>
+      <!-- Team selection overview bar -->
+      <div id="placement-team-bar"></div>
       <div class="placement-layout">
         <div class="placement-canvas-wrap">
           <canvas id="placement-canvas"></canvas>
@@ -1177,7 +1717,6 @@
         <div class="hud-meta">
           <div class="hud-round" id="round-indicator">라운드 1</div>
           <div class="hud-turn-label" id="turn-indicator">—</div>
-          <button id="pass-btn" class="hud-pass-btn" style="display:none;">⏭ 패스</button>
         </div>
         <div class="hud-units">
           <div id="turn-order-bar" class="turn-order-bar"></div>
@@ -1192,6 +1731,27 @@
       <div class="board-wrap">
         <canvas id="board-canvas"></canvas>
         <canvas id="anim-canvas"></canvas>
+      </div>
+
+      <!-- Bottom Action Bar (XCOM style: Passives | Weapon1 | Weapon2 | PASS) -->
+      <div id="bottom-action-bar">
+        <div id="bottom-passives">
+          <span class="bottom-no-passive">유닛을 선택하세요</span>
+        </div>
+        <div id="bottom-skills"></div>
+        <div id="bottom-weapons">
+          <div class="bottom-weapon-slot" id="bottom-weapon1">
+            <span class="bws-label">무기1</span>
+            <span class="bws-empty">—</span>
+          </div>
+          <div class="bottom-weapon-slot" id="bottom-weapon2">
+            <span class="bws-label">무기2</span>
+            <span class="bws-empty">—</span>
+          </div>
+        </div>
+        <div id="bottom-pass-area">
+          <button id="pass-btn" style="display:none;">⏭ 턴 종료</button>
+        </div>
       </div>
 
       <!-- Floating unit info panel (canvas click) -->

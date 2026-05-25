@@ -441,6 +441,7 @@ export async function registerRoutes(
         ?? registry.getAllUnits().map((u) => u.id as string);
       const aiPlacement = generateAiPlacement(teamIndex, gridSize, maxUnits, draftPool, occupied);
       await sessionManager.savePlacement(req.params["gameId"], aiPlayerId as string, aiPlacement);
+      sessionManager.addAiPlayer(req.params["gameId"], aiPlayerId as string);
 
       // Try to start game if all placements + adapters are ready
       const updatedSession = sessionManager.getSession(req.params["gameId"])!;
@@ -622,6 +623,8 @@ export async function registerRoutes(
       targetPosition: z.object({ row: z.number().int(), col: z.number().int() }).optional(),
       sourceTile: z.object({ row: z.number().int(), col: z.number().int() }).optional(),
       targetUnitId: z.string().optional(),
+      /** Secondary weapon override for attack actions */
+      weaponId: z.string().optional(),
     }),
   });
 
@@ -669,6 +672,14 @@ export async function registerRoutes(
           unitId,
         };
       } else if (action.type === "move" && action.targetPosition !== undefined) {
+        // Save pre-move state for undo
+        const movingUnit = session.state.units[unitId];
+        if (movingUnit !== undefined) {
+          session.pendingMoveUndos.set(String(unitId), {
+            from: movingUnit.position,
+            movementPoints: movingUnit.movementPoints,
+          });
+        }
         playerAction = {
           type: "move",
           playerId: playerId as PlayerId,
@@ -676,12 +687,15 @@ export async function registerRoutes(
           destination: action.targetPosition as import("@ab/metadata").Position,
         };
       } else if (action.type === "attack" && action.targetPosition !== undefined) {
+        // Attacking clears the undo record for this unit
+        session.pendingMoveUndos.delete(String(unitId));
         playerAction = {
           type: "attack",
           playerId: playerId as PlayerId,
           unitId,
           target: action.targetPosition as import("@ab/metadata").Position,
           sourceTile: action.sourceTile as import("@ab/metadata").Position | undefined,
+          weaponId: action.weaponId as import("@ab/metadata").MetaId | undefined,
         };
       } else if (action.type === "skill" && action.skillId !== undefined && action.targetPosition !== undefined) {
         playerAction = {
@@ -716,14 +730,14 @@ export async function registerRoutes(
 
   // GET /api/v1/rooms/:gameId/unit-options?playerId=X&unitId=Y
   // Returns valid moves, attack range, and unit stats for a given unit
-  fastify.get<{ Params: { gameId: string }; Querystring: { playerId: string; unitId: string } }>(
+  fastify.get<{ Params: { gameId: string }; Querystring: { playerId: string; unitId: string; weaponId?: string } }>(
     "/api/v1/rooms/:gameId/unit-options",
     { preHandler: requireAuth },
     async (req, reply) => {
       const session = sessionManager.getSession(req.params["gameId"]);
       if (session === undefined) return reply.code(404).send({ error: "Game not found" });
 
-      const { playerId, unitId } = req.query;
+      const { playerId, unitId, weaponId: overrideWeaponId } = req.query;
       const unit = session.state.units[unitId];
       if (unit === undefined) return reply.code(404).send({ error: "Unit not found" });
 
@@ -734,23 +748,45 @@ export async function registerRoutes(
         ? []
         : movementValidator.getReachableTiles(unit, session.state);
 
-      // Attack range (all tiles in weapon range, valid targets)
+      // Attack range — uses override weapon if specified (e.g. secondary weapon)
+      const attackOpts = overrideWeaponId ? { overrideWeaponId } : undefined;
       const attackableTiles = unit.actionsUsed.attacked
         ? []
-        : attackValidator.getAttackableTargets(unit, session.state);
+        : attackValidator.getAttackableTargets(unit, session.state, attackOpts);
 
-      // Enemy positions that are actually attackable
-      const enemyPositions = attackableTiles.filter((pos) =>
-        Object.values(session.state.units).some(
-          (u) => u.alive && u.playerId !== playerId && u.position.row === pos.row && u.position.col === pos.col,
-        ),
+      // Determine if this weapon can meaningfully target empty tiles
+      // (applyTileEffect, area, spawnObstacle weapons)
+      const activeWeaponMeta = (() => {
+        try {
+          const unitMeta = registry.getUnit(unit.metaId);
+          const wid = overrideWeaponId ?? unitMeta.primaryWeaponId;
+          return wid !== undefined ? registry.getWeapon(wid) : undefined;
+        } catch { return undefined; }
+      })();
+      const w = activeWeaponMeta as Record<string, unknown> | undefined;
+      const canTargetEmptyTiles = w !== undefined && (
+        w["applyTileEffect"] !== undefined ||
+        w["area"] !== undefined ||
+        w["spawnObstacle"] !== undefined
       );
+
+      // Clickable attack targets: enemies, plus empty tiles for AoE/tile-effect weapons
+      const enemyPositions = canTargetEmptyTiles
+        ? attackableTiles  // all valid tiles are clickable
+        : attackableTiles.filter((pos) =>
+            Object.values(session.state.units).some(
+              (u) => u.alive && u.playerId !== playerId && u.position.row === pos.row && u.position.col === pos.col,
+            ),
+          );
 
       // Unit metadata + weapon stats
       try {
         const unitMeta = registry.getUnit(unit.metaId);
         const weapon = unitMeta.primaryWeaponId !== undefined
           ? registry.getWeapon(unitMeta.primaryWeaponId)
+          : undefined;
+        const weapon2 = unitMeta.secondaryWeaponId !== undefined
+          ? registry.getWeapon(unitMeta.secondaryWeaponId)
           : undefined;
 
         const canSkill = !unit.actionsUsed.skillUsed && !unit.actionsUsed.attacked;
@@ -780,12 +816,40 @@ export async function registerRoutes(
           };
         });
 
+        // Build passive list from passiveIds
+        const passives = unitMeta.passiveIds.map((pid) => {
+          try {
+            const p = registry.getUnitPassive(pid as import("@ab/metadata").MetaId);
+            return { passiveId: p.id, nameKey: p.nameKey, descKey: p.descKey };
+          } catch { return null; }
+        }).filter((p): p is NonNullable<typeof p> => p !== null);
+
+        const weaponToObj = (w: typeof weapon) => w !== undefined ? {
+          id: w.id,
+          name: w.nameKey,
+          damage: w.damage,
+          minRange: w.minRange,
+          maxRange: w.maxRange,
+          attackType: w.attackType,
+          attribute: w.attribute,
+          knockback: (w as unknown as Record<string,unknown>)["knockback"],
+          splash: (w as unknown as Record<string,unknown>)["splash"],
+          rush: !!(w as unknown as Record<string,unknown>)["rush"],
+          confusion: (w as unknown as Record<string,unknown>)["confusion"],
+          applyTileEffect: (w as unknown as Record<string,unknown>)["applyTileEffect"],
+          selfTileEffect: (w as unknown as Record<string,unknown>)["selfTileEffect"],
+          penetrating: w.penetrating,
+          arcing: w.arcing,
+        } : null;
+
         return reply.code(200).send({
           reachableTiles,
           attackableTiles,
           enemyPositions,
+          canTargetEmptyTiles,
           canMove: !unit.actionsUsed.moved,
           canAttack: !unit.actionsUsed.attacked,
+          canUndo: session.pendingMoveUndos.has(String(unit.unitId)) && !unit.actionsUsed.attacked,
           canSkill,
           skills,
           unitInfo: {
@@ -801,20 +865,61 @@ export async function registerRoutes(
             baseMovement: unitMeta.baseMovement,
             activeEffects: unit.activeEffects,
             actionsUsed: unit.actionsUsed,
-            weapon: weapon !== undefined ? {
-              name: weapon.nameKey,
-              damage: weapon.damage,
-              minRange: weapon.minRange,
-              maxRange: weapon.maxRange,
-              attackType: weapon.attackType,
-              attribute: weapon.attribute,
-            } : null,
+            weapon: weaponToObj(weapon),
+            weapon2: weaponToObj(weapon2),
+            passives,
             skills,
           },
         });
       } catch {
         return reply.code(500).send({ error: "Unit metadata not found" });
       }
+    },
+  );
+
+  // ── Undo move (protected) ────────────────────────────────────────────────
+
+  /**
+   * POST /api/v1/rooms/:gameId/undo-move
+   * Reverts the current unit's move action if it hasn't attacked yet.
+   * Body: { playerId: string, unitId: string }
+   */
+  fastify.post<{ Params: { gameId: string } }>(
+    "/api/v1/rooms/:gameId/undo-move",
+    { preHandler: requireAuth },
+    async (req, reply) => {
+      const session = sessionManager.getSession(req.params["gameId"]);
+      if (session === undefined) return reply.code(404).send({ error: "Game not found" });
+
+      const { playerId, unitId } = (req.body ?? {}) as { playerId?: string; unitId?: string };
+      if (!unitId) return reply.code(400).send({ error: "unitId required" });
+
+      const unit = session.state.units[unitId];
+      if (unit === undefined) return reply.code(404).send({ error: "Unit not found" });
+      if (unit.playerId !== playerId) return reply.code(403).send({ error: "Not your unit" });
+      if (unit.actionsUsed.attacked) return reply.code(409).send({ error: "Cannot undo after attacking" });
+
+      const undoData = session.pendingMoveUndos.get(unitId);
+      if (undoData === undefined) return reply.code(409).send({ error: "No move to undo" });
+
+      // Revert unit position and movement points, clear moved flag
+      session.state = {
+        ...session.state,
+        units: {
+          ...session.state.units,
+          [unitId]: {
+            ...unit,
+            position: undoData.from,
+            movementPoints: undoData.movementPoints,
+            actionsUsed: { ...unit.actionsUsed, moved: false },
+          },
+        },
+      };
+      session.pendingMoveUndos.delete(unitId);
+
+      // Broadcast updated state
+      await sessionManager.updateState(session.gameId, session.state);
+      return reply.code(200).send({ accepted: true, state: session.state });
     },
   );
 
