@@ -1,7 +1,52 @@
 # AB — 구현 진행 현황
 
-> 최종 업데이트: 2026-04-14  
-> 상태: **Phase 7 완료** (모든 테스트 통과 + 전체 빌드 성공)
+> 최종 업데이트: 2026-05-26  
+> 상태: **Phase 8 완료** (모든 테스트 통과 + E2E 4인 브라우저 검증)
+
+---
+
+## Phase 8 완료 요약
+
+| 단계 | 내용 | 상태 | 비고 |
+|---|---|---|---|
+| Phase 8-1 | GameLogger 전면 재설계 (8종 엔트리, HP before→after, tiles 스냅샷) | ✅ 완료 | game-logger.ts +529줄 |
+| Phase 8-2 | ReplayAdapter (커서 기반, 유닛 순서 재현, pass 경계 처리) | ✅ 완료 | replay-adapter.ts |
+| Phase 8-3 | MemoryReplayStore + GET /api/v1/replays/:gameId | ✅ 완료 | replay-store.ts |
+| Phase 8-4 | BG3/DOS2 스타일 TacticalAdapter (aggressive/defensive 프로파일) | ✅ 완료 | @ab/ai |
+| Phase 8-5 | 로그 재구성 테스트 — TacticalAdapter 결과 vs ReplayAdapter 재현 비교 | ✅ 완료 | log-reconstruction.test.ts |
+| Phase 8-6 | 테스트 flakiness 수정 (지형 비결정론 → ALL_PLAIN_OVERRIDES) | ✅ 완료 | 20/20 안정 |
+| Phase 8-7 | round.start 이벤트 순서 수정 + AI vs AI 룰 검증 테스트 | ✅ 완료 | game-loop.ts |
+| Phase 8-8 | E2E 브라우저 4인 테스트 (2인간 + 2AI, 대기실→배치→전투) | ✅ 완료 | 51.9s PASS |
+
+**총 테스트: 622개 / 622개 통과 (실패 0)**
+
+| 패키지 | 테스트 수 | 이전 |
+|---|---|---|
+| @ab/metadata | 39 | 39 |
+| @ab/engine | 434 | 178 |
+| @ab/ai | 27 | 10 |
+| @ab/server | 122 | 104 |
+| **합계** | **622** | **331** |
+
+### Phase 8 핵심 변경 사항
+
+**GameLogger 재설계 (Phase 8-1)**
+- 8종 엔트리 타입: `game_start / round_start / turn_start / effect_tick / action / turn_end / round_end / game_end`
+- 모든 action 엔트리: `hpBefore/hpAfter` per-unit outcomes, `tilesChanged`, `accepted/errorCode`
+- `game_start`: 모든 유닛 초기 위치·HP + 비기본 타일 스냅샷
+- `round_start`: 해당 라운드 전체 activation 순서 (unitId 포함)
+- `game_end`: 모든 유닛 최종 HP/생존 상태 스냅샷
+
+**ReplayAdapter 커서 로직 (Phase 8-2)**
+- `requestAction`: `state.turnOrder[state.currentTurnIndex].unitId`로 expected unit 확인
+- 다른 유닛 차례의 action 발견 시 cursor 진행 없이 pass 반환 (경계 보존)
+- rejected 엔트리 건너뛰기 (수락된 action만 재생)
+- `requestUnitOrder`: `round_start` 엔트리에서 해당 플레이어의 유닛 순서 복원
+
+**지형 비결정론 수정 (Phase 8-6)**
+- 원인: `generateTerrain`이 `MathRng(Math.random())` 사용 → 다른 테스트가 소비한 랜덤값에 따라 지형 달라짐
+- 수정: `ALL_PLAIN_OVERRIDES` — 11×11 전체 121개 타일을 plain으로 강제 오버라이드
+- 결과: 20/20 연속 통과 (이전: 무작위 40% 실패)
 
 ---
 
@@ -399,10 +444,10 @@ scripts/
 
 ---
 
-## Phase 7 예정 작업
+## Phase 9 예정 작업
 
-1. **게임 리플레이**: ActionLog 저장 → WebSocket 재생 (`GET /api/v1/replays/:gameId`)
-2. **토너먼트 모드**: 대진표 관리, 자동 라운드 로빈/단일 탈락
-3. **관전자 채팅**: 관전 채널 spectator_chat 메시지
-4. **알림/푸시**: 매칭 완료 시 HTTP long-poll 또는 SSE 알림
-5. **패키지 빌드 검증**: `pnpm -r build` 전체 빌드 + tsc typecheck 통과
+1. **토너먼트 모드**: 대진표 관리, 자동 라운드 로빈/단일 탈락
+2. **관전자 채팅**: 관전 채널 spectator_chat 메시지
+3. **알림/푸시**: 매칭 완료 시 HTTP long-poll 또는 SSE 알림
+4. **리플레이 WebSocket 재생**: GET /api/v1/replays/:gameId → 프레임 단위 재생
+5. **TacticalAdapter 고도화**: 스킬 사용, 팀전 협력, 효과 활용

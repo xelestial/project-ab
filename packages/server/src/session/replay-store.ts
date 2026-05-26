@@ -17,26 +17,26 @@
  *   PG_POOL_SIZE  — max pool connections (default: 10)
  */
 
-import type { LogEntry } from "@ab/engine";
+import type { GameLogEntry } from "@ab/engine";
 import type { Pool as PgPool, PoolConfig } from "pg";
 
 // ─── Interface ────────────────────────────────────────────────────────────────
 
 export interface IReplayStore {
-  saveLog(gameId: string, entries: LogEntry[]): Promise<void>;
-  getLog(gameId: string): Promise<LogEntry[] | undefined>;
+  saveLog(gameId: string, entries: GameLogEntry[]): Promise<void>;
+  getLog(gameId: string): Promise<GameLogEntry[] | undefined>;
 }
 
 // ─── In-memory implementation ─────────────────────────────────────────────────
 
 export class MemoryReplayStore implements IReplayStore {
-  private readonly store = new Map<string, LogEntry[]>();
+  private readonly store = new Map<string, GameLogEntry[]>();
 
-  async saveLog(gameId: string, entries: LogEntry[]): Promise<void> {
+  async saveLog(gameId: string, entries: GameLogEntry[]): Promise<void> {
     this.store.set(gameId, entries);
   }
 
-  async getLog(gameId: string): Promise<LogEntry[] | undefined> {
+  async getLog(gameId: string): Promise<GameLogEntry[] | undefined> {
     return this.store.get(gameId);
   }
 }
@@ -70,7 +70,7 @@ export class PostgresReplayStore implements IReplayStore {
     });
   }
 
-  async saveLog(gameId: string, entries: LogEntry[]): Promise<void> {
+  async saveLog(gameId: string, entries: GameLogEntry[]): Promise<void> {
     if (this.pool === null) return;
     await this.pool.query(
       `INSERT INTO game_replays (game_id, entries)
@@ -80,9 +80,9 @@ export class PostgresReplayStore implements IReplayStore {
     );
   }
 
-  async getLog(gameId: string): Promise<LogEntry[] | undefined> {
+  async getLog(gameId: string): Promise<GameLogEntry[] | undefined> {
     if (this.pool === null) return undefined;
-    const { rows } = await this.pool.query<{ entries: LogEntry[] }>(
+    const { rows } = await this.pool.query<{ entries: GameLogEntry[] }>(
       "SELECT entries FROM game_replays WHERE game_id = $1",
       [gameId],
     );

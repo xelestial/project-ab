@@ -90,6 +90,9 @@ export class GameLoop implements IGameLoop {
       this.eventBus.emit({ type: "draft.end", state });
     }
 
+    // Log the initial battle-ready state (all units placed)
+    this.logger.logGameStart(state);
+
     // ─── Battle phase ─────────────────────────────────────────────────────────
     let gameEnded = false;
 
@@ -110,6 +113,7 @@ export class GameLoop implements IGameLoop {
       // 새 turnOrder와 함께 담아 내보내 구독자에게 inconsistent state가 노출된다.
       state = this.roundManager.startRound(state);
       this.eventBus.emit({ type: "round.start", round: state.round, state });
+      this.logger.logRoundStart(state);
 
       // Turn loop
       while (!this.turnManager.isRoundOver(state)) {
@@ -128,12 +132,20 @@ export class GameLoop implements IGameLoop {
         }
 
         // Effect tick for all units of current player (fire/acid damage, countdown)
+        const stateBeforeEffectTick = state;
         for (const unitId of Object.values(state.units)
           .filter((u) => u.alive && u.playerId === playerId)
           .map((u) => u.unitId)) {
           state = this.effectManager.processTurnStart(unitId, state);
         }
         state = this.healthManager.applyDeaths(state);
+        this.logger.logEffectTick(
+          state.round,
+          state.currentTurnIndex,
+          playerId,
+          stateBeforeEffectTick,
+          state,
+        );
 
         this.eventBus.emit({
           type: "turn.start",
@@ -141,6 +153,13 @@ export class GameLoop implements IGameLoop {
           turnIndex: state.currentTurnIndex,
           state,
         });
+        this.logger.logTurnStart(
+          state.round,
+          state.currentTurnIndex,
+          playerId,
+          slot.unitId,
+          state.gameId,
+        );
 
         // ── Multi-action turn loop: unit may move then attack ────────────────
         const adapter = adapters.get(playerId);
@@ -174,10 +193,11 @@ export class GameLoop implements IGameLoop {
             break;
           }
 
+          const stateBeforeAction = state;
           const result = this.actionProcessor.process(action, state);
 
           if (result.accepted) {
-            this.logger.logAction(action, result.changes, result.newState);
+            this.logger.logAction(action, result.changes, stateBeforeAction, result.newState, true);
             this.eventBus.emit({
               type: "action.accepted",
               action,
@@ -185,6 +205,7 @@ export class GameLoop implements IGameLoop {
               state: result.newState,
             });
           } else {
+            this.logger.logAction(action, [], stateBeforeAction, stateBeforeAction, false, result.errorCode ?? "unknown");
             this.eventBus.emit({
               type: "action.rejected",
               action,
@@ -204,6 +225,11 @@ export class GameLoop implements IGameLoop {
 
           if (subPostResult.end.ended) {
             gameEnded = true;
+            this.logger.logGameEnd(
+              subPostResult.end.winnerIds,
+              subPostResult.end.reason ?? "unknown",
+              state,
+            );
             this.eventBus.emit({
               type: "game.end",
               state,
@@ -222,6 +248,12 @@ export class GameLoop implements IGameLoop {
 
         if (gameEnded) break;
 
+        this.logger.logTurnEnd(
+          state.round,
+          state.currentTurnIndex,
+          playerId,
+          state.gameId,
+        );
         this.eventBus.emit({
           type: "turn.end",
           playerId,
@@ -247,6 +279,11 @@ export class GameLoop implements IGameLoop {
             winnerIds: endCheck.winnerIds as import("@ab/metadata").PlayerId[],
           },
         };
+        this.logger.logGameEnd(
+          endCheck.winnerIds,
+          endCheck.reason ?? "unknown",
+          state,
+        );
         this.eventBus.emit({
           type: "game.end",
           state,
@@ -256,6 +293,7 @@ export class GameLoop implements IGameLoop {
         break;
       }
 
+      this.logger.logRoundEnd(state.round, state.gameId);
       this.eventBus.emit({ type: "round.end", round: state.round, state });
       state = this.roundManager.endRound(state);
     }
