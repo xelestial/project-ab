@@ -121,14 +121,6 @@ const UNIT_ABBR: Record<string, string> = {
   b1: "B", b2: "B", b3: "B", b4: "B",
   a1: "A", a2: "A", a3: "A", a4: "A",
   u1: "U", u2: "U", u3: "U", u4: "U",
-  m1: "M", k1: "K", s1: "S",
-};
-
-/** Base HP per unit type (matches metadata/data/units.json baseHealth) */
-const UNIT_BASE_HEALTH: Record<string, number> = {
-  t1: 6, t2: 6, f1: 4, f2: 4,
-  r1: 4, r2: 4, b1: 5, b2: 5,
-  m1: 3, k1: 5, s1: 4,
 };
 
 const UNIT_NAME_KO: Record<string, string> = {
@@ -138,7 +130,6 @@ const UNIT_NAME_KO: Record<string, string> = {
   b1: "브루트1", b2: "브루트2", b3: "브루트3", b4: "브루트4",
   a1: "아틸러리1", a2: "아틸러리2", a3: "아틸러리3", a4: "아틸러리4",
   u1: "유틸리티1", u2: "유틸리티2", u3: "유틸리티3", u4: "유틸리티4",
-  m1: "메이지", k1: "나이트", s1: "서포트",
 };
 
 const SKILL_NAME_KO: Record<string, string> = {
@@ -149,6 +140,14 @@ const SKILL_DESC_KO: Record<string, string> = {
   skill_shield_defend: "패시브. 관통·광선 차단, 타일 효과 흡수.",
   skill_t2_pull: "사거리 1~3 적을 인접 칸으로 당김. 1회.",
 };
+
+function getUnitMeta(metaId: string): UnitMeta | undefined {
+  return availableUnits.find((unit) => unit.id === metaId);
+}
+
+function getUnitMaxHp(metaId: string): number {
+  return getUnitMeta(metaId)?.baseHealth ?? 1;
+}
 
 /** Korean names for weapon nameKeys (server returns nameKey as "name") */
 const WEAPON_NAME_KO: Record<string, string> = {
@@ -244,9 +243,12 @@ const UNIT_CLASS_KO: Record<string, string> = {
 const UNIT_CLASS_ORDER = ["tanker", "fighter", "ranger", "brute", "artillery", "utility"];
 
 const UNIT_EMOJI: Record<string, string> = {
-  t1: "🛡️", t2: "🛡️", f1: "⚔️", f2: "⚔️",
-  r1: "🏹", r2: "🏹", b1: "🪓", b2: "🪓",
-  m1: "🔮", k1: "⚔️", s1: "💚",
+  t1: "🛡️", t2: "🛡️", t3: "🛡️", t4: "🛡️",
+  f1: "⚔️", f2: "⚔️", f3: "⚔️", f4: "⚔️",
+  r1: "🏹", r2: "🏹", r3: "🏹", r4: "🏹",
+  b1: "🪓", b2: "🪓", b3: "🪓", b4: "🪓",
+  a1: "💥", a2: "💥", a3: "💥", a4: "💥",
+  u1: "💚", u2: "💚", u3: "💚", u4: "💚",
 };
 
 // ─── Isometric Renderer ───────────────────────────────────────────────────────
@@ -874,7 +876,7 @@ function drawUnit(
 
   // ── HP bar above the unit (alive units only) ──────────────────────────────
   if (!dead && currentHealth !== undefined && metaId !== undefined) {
-    const maxHp = UNIT_BASE_HEALTH[metaId] ?? 5;
+    const maxHp = getUnitMaxHp(metaId);
     const hpPct = Math.max(0, Math.min(1, currentHealth / maxHp));
     const barW = Math.round(HW * 1.1);
     const barH = Math.max(3, Math.round(HH * 0.18));
@@ -1737,7 +1739,7 @@ async function openPlacementScreen(gameId: string): Promise<void> {  // eslint-d
     } catch { /* fallback to defaults */ }
   }
 
-  // Fetch unit metadata
+  // Fetch unit metadata from the single source of truth.
   try {
     const res = await fetch(`${API_BASE}/api/v1/meta/units`);
     if (res.ok) {
@@ -1747,14 +1749,8 @@ async function openPlacementScreen(gameId: string): Promise<void> {  // eslint-d
   } catch { /* fallback */ }
 
   if (availableUnits.length === 0) {
-    availableUnits = [
-      { id: "t1", nameKey: "unit.t1.name", class: "tanker",  baseHealth: 5, baseMovement: 3, baseArmor: 1 },
-      { id: "f1", nameKey: "unit.f1.name", class: "fighter", baseHealth: 4, baseMovement: 4, baseArmor: 0 },
-      { id: "r1", nameKey: "unit.r1.name", class: "ranger",  baseHealth: 3, baseMovement: 4, baseArmor: 0 },
-      { id: "m1", nameKey: "unit.m1.name", class: "mage",    baseHealth: 3, baseMovement: 3, baseArmor: 0 },
-      { id: "k1", nameKey: "unit.k1.name", class: "tanker",  baseHealth: 5, baseMovement: 2, baseArmor: 2 },
-      { id: "s1", nameKey: "unit.s1.name", class: "support", baseHealth: 3, baseMovement: 4, baseArmor: 0 },
-    ];
+    setStatus("유닛 메타데이터를 불러오지 못했습니다. 서버 /api/v1/meta/units를 확인하세요.");
+    return;
   }
 
   const maxUnits = currentMode.maxUnitsPerPlayer;
@@ -2855,8 +2851,7 @@ function renderTurnOrder(state: GameStateSnapshot, playerIds: string[]): void {
     lastPIdx = pIdx;
 
     // HP calculation
-    const meta = availableUnits.find(m => m.id === metaId);
-    const maxHp = meta?.baseHealth ?? 1;
+    const maxHp = getUnitMaxHp(metaId);
     const curHp = unit?.currentHealth ?? 0;
     const hpPct = isDead ? 0 : Math.max(0, Math.min(100, (curHp / maxHp) * 100));
     const hpColor = hpPct > 60 ? "#4caf50" : hpPct > 30 ? "#ff9800" : "#f44336";
@@ -2925,8 +2920,8 @@ function showUnitHoverPanel(
   const color = PLAYER_COLORS[pIdx >= 0 ? pIdx : 0]!;
   const unitName = UNIT_NAME_KO[metaId] ?? metaId;
   const abbr = UNIT_ABBR[metaId] ?? metaId.slice(0, 2).toUpperCase();
-  const meta = availableUnits.find(m => m.id === metaId);
-  const maxHp = meta?.baseHealth ?? 1;
+  const meta = getUnitMeta(metaId);
+  const maxHp = getUnitMaxHp(metaId);
   const hpPct = unit.alive ? Math.max(0, Math.min(100, (unit.currentHealth / maxHp) * 100)) : 0;
   const hpColor = hpPct > 60 ? "#4caf50" : hpPct > 30 ? "#ff9800" : "#f44336";
 
@@ -3156,8 +3151,7 @@ function showAttackPreviewCard(
   const portraitHtml = portrait
     ? `<img class="apc-portrait" src="${portrait}" alt="${name}" />`
     : `<div class="apc-portrait-fallback">${UNIT_ABBR[metaId] ?? "?"}</div>`;
-  const meta = availableUnits.find(m => m.id === metaId);
-  const maxHp = meta?.baseHealth ?? 1;
+  const maxHp = getUnitMaxHp(metaId);
   const hpPct = Math.max(0, Math.min(100, (unit.currentHealth / maxHp) * 100));
   const hpColor = hpPct > 60 ? "#4caf50" : hpPct > 30 ? "#ff9800" : "#f44336";
 

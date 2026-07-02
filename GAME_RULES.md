@@ -110,7 +110,7 @@
 - 최대 **30라운드**. Round 31이 되면 게임 종료 판정.
 
 ### 4.2 라운드 시작 처리 (`roundManager.startRound`)
-- 모든 생존 유닛의 `actionsUsed` 리셋: `{ moved: false, attacked: false, skillUsed: false, extinguished: false }`.
+- 모든 생존 유닛의 `actionsUsed` 리셋: `{ moved: false, attacked: false, skillUsed: false, rested: false }`.
 - 모든 생존 유닛의 `movementPoints` 복원 (`baseMovement`).
 
 ### 4.3 라운드 종료 처리 (`roundManager.endRound`)
@@ -194,7 +194,7 @@ while !turnEnded:
 | `move` | 유닛을 목적지로 이동 |
 | `attack` | 지정 좌표를 공격 (기본 무기) |
 | `skill` | 스킬 사용 (skillId + target) |
-| `extinguish` | 자신의 화염 효과 제거 (소화) |
+| `rest` | **휴식** — 체력 1 회복 + 모든 상태이상 제거 (공격 대신; 이동 후 가능, 턴 종료) |
 | `pass` | 턴 즉시 종료 |
 | `draft_place` | 드래프트 단계에서 유닛 배치 |
 
@@ -205,8 +205,11 @@ while !turnEnded:
   - 이동 후 공격은 **가능**.
 - 스킬은 게임 전체에서 **1회만** 사용 가능 (`actionsUsed.skillUsed`, `oneShot: true` 스킬의 경우).
   - 스킬 사용은 공격 액션과 동일하게 `attacked = true`로 표시되며 턴을 종료한다.
-- 소화(`extinguish`)는 자신에게 화염 효과가 있을 때만 가능 (`actionsUsed.extinguished`).
-  - 소화는 이동 액션을 소모한다 (`actionsUsed.moved = true`).
+- **휴식(`rest`)**: 모든 유닛이 사용 가능. **이동은 먼저 할 수 있으나 공격을 대신한다** —
+  아직 공격하지 않았을 때만 가능 (`attacked == false`). 즉 **이동→휴식 OK, 공격→휴식 불가**.
+  - 효과: **체력 1 회복**(최대 HP 초과 불가) + **자신의 모든 활성 상태이상 제거**.
+  - 즉시 턴을 종료한다 (공격과 같은 턴 종료 액션).
+  - 빙결 상태에서는 모든 행동이 막히므로 휴식도 불가 (빙결은 1턴 후 자동 해제).
 
 ---
 
@@ -371,7 +374,7 @@ if target has acid effect:
 1. **벽/경계 밖**: `unit_knockback` (blockedBy: "wall"), 이동 없음, 피해 없음, 즉시 종료.
 2. **다른 유닛 점유**: 
    - 막는 유닛에게 `collision_with_frozen` 제거 조건 처리.
-   - 밀려난 유닛에게 충돌 피해 **1 (KNOCKBACK_COLLISION_DAMAGE)**.
+   - **밀려난 유닛과 막는 유닛 양쪽**에게 각각 충돌 피해 **1 (KNOCKBACK_COLLISION_DAMAGE)**.
    - `unit_knockback` (blockedBy: 유닛ID), 이동 없음, 즉시 종료.
 3. **강(River) 타일**: `unit_river_enter` (모든 효과 초기화), 즉시 종료.
 4. **빈 타일**: `unit_knockback` (이동), 도착 타일 진입 처리 (효과 획득/제거).
@@ -399,12 +402,16 @@ if target has acid effect:
 
 | 효과 | 유형 | 턴당 피해 | 지속 | 행동 제한 | 제거 조건 |
 |------|------|-----------|------|-----------|-----------|
-| 화염 (fire) | fire | 1 | 3턴 | 없음 | 3턴 / 소화 행동 / 강 진입 |
-| 산성 (acid) | acid | 1 | 3턴 | 없음 | 3턴 / 강 진입 |
-| 감전 (electric) | electric | 1 | 1턴 | 없음 | 1턴 |
-| 빙결 (freeze) | freeze | 0 | 1턴 | **모든 행동 불가** | 1턴 / 빙결 유닛과 충돌 |
-| 물 (water) | water | 0 | 영구 | 없음 | 이동 시 자동 제거 |
-| 모래 (sand) | sand | 0 | 영구 | 없음 | 이동 시 자동 제거 |
+| 화염 (fire) | fire | 1 | 3턴 | 없음 | 3턴 / 휴식 행동 / 강 진입 |
+| 산성 (acid) | acid | **0** | 3턴 | 없음 | 3턴 / 휴식 행동 / 강 진입 |
+| 감전 (electric) | electric | 1 | 1턴 | 없음 | 1턴 / 휴식 행동 |
+| 빙결 (freeze) | freeze | 0 | 1턴 | **모든 행동 불가** | 1턴 / 빙결 유닛과 충돌 (휴식 불가 — 행동 차단) |
+| 물 (water) | water | 0 | 영구 | 없음 | 이동 시 자동 제거 / 휴식 행동 |
+| 모래 (sand) | sand | 0 | 영구 | 없음 | 이동 시 자동 제거 / 휴식 행동 |
+
+> **휴식(Rest) 행동**: 모든 유닛은 공격 대신 휴식해 **체력 1 회복 + 자신의 모든 상태이상 제거**를
+> 할 수 있다 (이동은 먼저 해도 됨, 공격은 불가). 사용 시 즉시 턴 종료. 단 빙결 상태에서는 행동
+> 자체가 불가하므로 휴식으로 빙결을 풀 수는 없다 (빙결은 1턴 후 자동 해제). 자세한 규칙은 §6.4 참조.
 
 ### 11.2 산성 효과의 특수 동작
 - 유닛에게 산성 효과가 적용되면 **해당 유닛이 서있는 타일도 산성 타일로 변환** (`alsoAffectsTile: true`).
@@ -537,350 +544,19 @@ attack(attacker, target, state, options?):
 
 ---
 
-## 16. 유닛 데이터
-
-### t1 — 강철방패 (Tanker A)
-
-| 속성 | 값 |
-|------|-----|
-| class | tanker |
-| faction | a |
-| baseMovement | 3 |
-| baseHealth | 6 |
-| baseArmor | **1** |
-| attributes | (없음) |
-| primaryWeapon | `wpn_tanker_melee` |
-| skills | `skill_shield_defend` |
-| passives | (없음) |
-
-**특징**: 아머 1로 1데미지 공격을 완전 차단. 방패 방어 스킬로 자신이 서있는 속성 타일을 흡수해 속성 공격 가능. 관통 공격의 전파를 차단.
-
----
-
-### t2 — 철갑 방패 (Tanker B)
-
-| 속성 | 값 |
-|------|-----|
-| class | tanker |
-| faction | b |
-| baseMovement | 3 |
-| baseHealth | 6 |
-| baseArmor | **1** |
-| attributes | (없음) |
-| primaryWeapon | `wpn_tanker_melee` |
-| skills | `skill_shield_defend`, `skill_t2_pull` |
-| passives | (없음) |
-
-**특징**: t1의 모든 특성에 더해, 1회 사용 풀 스킬 보유. 3칸 이내 적을 인접으로 끌어당김.
-
----
-
-### f1 — 돌격대원 (Fighter A)
-
-| 속성 | 값 |
-|------|-----|
-| class | fighter |
-| faction | a |
-| baseMovement | 3 |
-| baseHealth | 4 |
-| baseArmor | 0 |
-| attributes | (없음) |
-| primaryWeapon | `wpn_fighter_rush_kb` |
-| skills | (없음) |
-| passives | (없음) |
-
-**특징**: 직선 1~3칸 내 대상에게 돌진 공격. 공격 시 대상을 1칸 밀어냄.
-
----
-
-### f2 — 돌격대원 B (Fighter B)
-
-| 속성 | 값 |
-|------|-----|
-| class | fighter |
-| faction | b |
-| baseMovement | 3 |
-| baseHealth | 4 |
-| baseArmor | 0 |
-| attributes | (없음) |
-| primaryWeapon | `wpn_fighter_rush_kb` |
-| skills | (없음) |
-| passives | (없음) |
-
-**특징**: f1과 동일.
-
----
-
-### r1 — 화살사수 (Ranger A)
-
-| 속성 | 값 |
-|------|-----|
-| class | ranger |
-| faction | a |
-| baseMovement | 2 |
-| baseHealth | 4 |
-| baseArmor | 0 |
-| attributes | (없음) |
-| primaryWeapon | `wpn_ranger_penetrate_absorb` |
-| skills | (없음) |
-| passives | (없음) |
-
-**특징**: 사거리 2~3, 관통 공격. 인접 타일 속성 흡수 가능 (`sourceTile` 지정 시). 흡수 속성으로 대상 및 타일 변환.
-
----
-
-### r2 — 레인저 B (Ranger B)
-
-| 속성 | 값 |
-|------|-----|
-| class | ranger |
-| faction | b |
-| baseMovement | 2 |
-| baseHealth | 4 |
-| baseArmor | 0 |
-| attributes | (없음) |
-| primaryWeapon | `wpn_ranger_penetrate_kb` |
-| skills | (없음) |
-| passives | (없음) |
-
-**특징**: 사거리 2~3, 관통 공격. 적중 시 1칸 밀어냄.
-
----
-
-### b1 — 화염 브루트 (Brute A)
-
-| 속성 | 값 |
-|------|-----|
-| class | brute |
-| faction | a |
-| baseMovement | 3 |
-| baseHealth | 5 |
-| baseArmor | 0 |
-| attributes | (없음) |
-| primaryWeapon | `wpn_brute_water` |
-| skills | (없음) |
-| passives | `passive_b1_fire_heal` |
-
-**특징**: 
-- **패시브**: 화염 타일에 진입하면 해당 타일을 `plain`으로 변환하고 HP 1 회복.
-- **무기**: 사거리 1~2, 물 속성 공격 (타격 시 화염 효과 제거 + 타일 물로 변환).
-
----
-
-### b2 — 타일 면역 브루트 (Brute B)
-
-| 속성 | 값 |
-|------|-----|
-| class | brute |
-| faction | b |
-| baseMovement | 3 |
-| baseHealth | 5 |
-| baseArmor | 0 |
-| attributes | (없음) |
-| primaryWeapon | `wpn_brute_melee` |
-| skills | (없음) |
-| passives | `passive_b2_tile_immunity`, `passive_b2_tile_spread` |
-
-**특징**:
-- **패시브 1 (always_on)**: 타일 효과/피해 완전 면제, 원소 효과 면제.
-  - 타일 진입 시 어떠한 효과도 받지 않음.
-  - 타일 지속 피해도 받지 않음.
-- **패시브 2 (on_tile_entry_any_attribute)**: 속성 있는 타일에 진입 시 4방향 인접 타일에 해당 속성 전파.
-
----
-
-## 17. 무기 데이터
-
-### wpn_tanker_melee — 방패 타격
-
-| 속성 | 값 |
-|------|-----|
-| attackType | melee |
-| rangeType | single |
-| minRange | 1 |
-| maxRange | 1 |
-| damage | **2** |
-| attribute | none |
-
----
-
-### wpn_t2_pull — 철갑 끌어당기기 (스킬 무기)
-
-| 속성 | 값 |
-|------|-----|
-| attackType | melee |
-| rangeType | single |
-| minRange | 1 |
-| maxRange | **3** |
-| damage | **0** |
-| attribute | none |
-| pull | `{ landAdjacent: true }` |
-| requiresClearPath | **true** |
-
-> 데미지 없음. 3칸 이내 적을 인접으로 끌어당김. 경로가 막히면 사용 불가.
-
----
-
-### wpn_fighter_rush_kb — 돌진 베기
-
-| 속성 | 값 |
-|------|-----|
-| attackType | melee |
-| rangeType | single |
-| minRange | 1 |
-| maxRange | **3** |
-| damage | **2** |
-| attribute | none |
-| rush | `{ requiresClearPath: true }` |
-| knockback | `{ distance: 1, direction: "away" }` |
-
-> 직선 3칸 돌진 + 타격 + 1칸 밀어냄. 경로 통과 필요.
-
----
-
-### wpn_ranger_penetrate_absorb — 관통+흡수
-
-| 속성 | 값 |
-|------|-----|
-| attackType | ranged |
-| rangeType | **penetrate** |
-| minRange | **2** |
-| maxRange | **3** |
-| damage | **2** |
-| attribute | none |
-| adjacentTileAbsorb | **true** |
-
-> 최소 사거리 2 (인접 공격 불가). 관통. 인접 타일 흡수로 속성 공격 가능.
-
----
-
-### wpn_ranger_penetrate_kb — 관통+넉백
-
-| 속성 | 값 |
-|------|-----|
-| attackType | ranged |
-| rangeType | **penetrate** |
-| minRange | **2** |
-| maxRange | **3** |
-| damage | **2** |
-| attribute | none |
-| knockback | `{ distance: 1, direction: "away" }` |
-
-> 최소 사거리 2. 관통. 1차 대상에게 1칸 넉백.
-
----
-
-### wpn_brute_water — 물 속성 근거리
-
-| 속성 | 값 |
-|------|-----|
-| attackType | melee |
-| rangeType | single |
-| minRange | 1 |
-| maxRange | **2** |
-| damage | **1** |
-| attribute | **water** |
-
-> 물 속성 공격: 대상의 화염 효과 제거 (원소 반응), 타일 물 변환.
-
----
-
-### wpn_brute_melee — 브루트 근거리
-
-| 속성 | 값 |
-|------|-----|
-| attackType | melee |
-| rangeType | single |
-| minRange | 1 |
-| maxRange | **2** |
-| damage | **1** |
-| attribute | none |
-
----
-
-## 18. 스킬 데이터
-
-### skill_shield_defend — 방패 방어
-
-| 속성 | 값 |
-|------|-----|
-| type | **passive** |
-| oneShot | false |
-| weaponId | (없음) |
-
-**효과:**
-1. 관통(`penetrate`) 및 광선(`beam`) 공격의 전파를 차단 (유닛에게 피해는 입음).
-2. 공격 시 자신의 타일 속성을 흡수해 속성 공격 가능 (공격 직전 발동).
-
-**관통 차단 메카닉:**
-- `calcAffectedPositions`에서 `penetrate` 타입 처리 시, 방패 유닛에 적중하면 그 뒤쪽은 `affectedPositions`에 포함하지 않음.
-
----
-
-### skill_t2_pull — 철갑 끌어당기기
-
-| 속성 | 값 |
-|------|-----|
-| type | **active** |
-| oneShot | **true** |
-| weaponId | `wpn_t2_pull` |
-
-**효과:**
-- 사거리 1~3 직선상의 적을 t2 인접으로 끌어당김.
-- 데미지 없음.
-- 경로가 통과 가능해야 함.
-- **게임당 1회**만 사용 가능.
-
----
-
-## 19. 패시브 데이터
-
-### passive_b1_fire_heal — b1 화염 치유
-
-| 속성 | 값 |
-|------|-----|
-| trigger | `on_tile_entry_of(fire)` |
-| actions | `convert_entered_tile(to: plain)`, `heal_self(amount: 1)` |
-
-**발동 조건**: b1이 화염(`fire`) 타일에 진입할 때.
-
-**처리 순서:**
-1. 진입한 화염 타일을 `plain`으로 변환.
-2. b1 HP +1 회복 (최대 HP 초과 불가).
-
-> **주의**: 타일이 plain으로 변환된 후에는 일반 타일 효과(fire 효과 부여)가 적용되지 않음. `effectiveTileAttr`이 `plain`으로 변경되기 때문.
-
----
-
-### passive_b2_tile_immunity — b2 타일 면역
-
-| 속성 | 값 |
-|------|-----|
-| trigger | `always_on` |
-| actions | `immune_tile_effects`, `immune_tile_damage`, `immune_elemental_effects` |
-
-**효과:**
-- **immune_tile_effects**: 타일 진입 시 어떠한 효과도 받지 않음 (Step 2 완전 건너뜀).
-- **immune_tile_damage**: 턴 시작 시 타일 지속 피해 없음.
-- **immune_elemental_effects**: (현재 구현에서는 공격 시 원소 효과 적용 면제; 향후 확장).
-
----
-
-### passive_b2_tile_spread — b2 타일 전파
-
-| 속성 | 값 |
-|------|-----|
-| trigger | `on_tile_entry_any_attribute` (plain, road 제외) |
-| actions | `spread_entered_tile_attr` |
-
-**발동 조건**: b2가 속성(plain/road 제외)이 있는 타일에 진입할 때.
-
-**처리:**
-- 진입한 타일의 **원래 속성**을 4방향 인접 타일에 모두 전파.
-- 이미 같은 속성인 타일은 변환 안 함.
-- `tile_attribute_change` 이벤트 발생.
-
-> **주의**: `passive_b2_tile_immunity`와 `passive_b2_tile_spread`가 함께 발동 시, 타일 효과(Step 2)는 면제되지만 타일 전파(Step 1 패시브)는 실행됨. b2는 전파는 하지만 효과는 받지 않음.
+## 16-19. 메타데이터 단일 소스
+
+유닛/무기/스킬/패시브 값은 이 문서에 중복 기재하지 않는다. 아래 파일이 단일 소스다.
+
+| 데이터 | 단일 소스 |
+|---|---|
+| 유닛 | `packages/metadata/data/units.json` |
+| 무기 | `packages/metadata/data/weapons.json` |
+| 스킬 | `packages/metadata/data/skills.json` |
+| 패시브 | `packages/metadata/data/unit-passives.json` |
+| 요약 문서 | `UNIT.MD` |
+
+구현/테스트/클라이언트는 `/api/v1/meta/units` 및 `DataRegistry`를 통해 위 데이터를 조회해야 한다.
 
 ---
 
@@ -896,7 +572,7 @@ attack(attacker, target, state, options?):
 | alsoAffectsTile | false |
 | clearsAllEffectsOnApply | false |
 | incomingDamageMultiplier | 1 (기본) |
-| removeConditions | `turns(3)`, `manual_extinguish`, `river_entry` |
+| removeConditions | `turns(3)`, `rest`, `river_entry` |
 
 ---
 
@@ -905,12 +581,15 @@ attack(attacker, target, state, options?):
 | 속성 | 값 |
 |------|-----|
 | effectType | acid |
-| damagePerTurn | **1** |
+| damagePerTurn | **0** |
 | blocksAllActions | false |
 | alsoAffectsTile | **true** |
 | clearsAllEffectsOnApply | false |
 | incomingDamageMultiplier | **2.0** |
-| removeConditions | `turns(3)`, `river_entry` |
+| removeConditions | `turns(3)`, `rest`, `river_entry` |
+
+> 산성은 **지속 피해가 없다**. 유일한 효과는 받는 피해 ×2(`incomingDamageMultiplier`)와
+> 발밑 타일 산성화(`alsoAffectsTile`)다.
 
 ---
 
@@ -924,7 +603,7 @@ attack(attacker, target, state, options?):
 | alsoAffectsTile | false |
 | clearsAllEffectsOnApply | false |
 | incomingDamageMultiplier | 1 |
-| removeConditions | `turns(1)` |
+| removeConditions | `turns(1)`, `rest` |
 
 ---
 
@@ -952,7 +631,7 @@ attack(attacker, target, state, options?):
 | alsoAffectsTile | false |
 | clearsAllEffectsOnApply | false |
 | incomingDamageMultiplier | 1 |
-| removeConditions | `on_move` |
+| removeConditions | `on_move`, `rest` |
 
 ---
 
@@ -966,7 +645,7 @@ attack(attacker, target, state, options?):
 | alsoAffectsTile | false |
 | clearsAllEffectsOnApply | false |
 | incomingDamageMultiplier | 1 |
-| removeConditions | `on_move` |
+| removeConditions | `on_move`, `rest` |
 
 ---
 
@@ -1074,8 +753,10 @@ plain과 동일.
 | moveCost | 1 |
 | impassable | false |
 | cannotStop | false |
-| damagePerTurn | **1** |
+| damagePerTurn | **0** |
 | appliesEffectId | `effect_acid` |
+
+> 산성 타일도 **지속 피해가 없다**. 진입한 유닛에게 산성 효과(받는 피해 ×2)만 부여한다.
 
 ---
 
@@ -1233,7 +914,7 @@ plain과 동일.
 - **돌진 경로 검증**: 공격자와 대상 사이 모든 타일이 비어 있어야 함 (유닛 없음, 산악 없음).
 - **풀 경로 검증**: 동일 조건.
 - **스킬 중복 사용**: `actionsUsed.skillUsed` 또는 `oneShot` + 이전 사용 기록이 있으면 거부.
-- **소화 조건**: 자신에게 화염(`fire`) 효과가 있어야 함. `extinguished` 플래그로 1회만.
+- **휴식 조건**: 이번 턴에 공격을 하지 않았어야 함(`attacked == false`; **이동 후에도 가능**). 빙결 상태 불가. 사용 시 체력 1 회복 + 모든 상태이상 제거 후 턴 종료.
 
 ---
 

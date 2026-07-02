@@ -899,7 +899,10 @@ project-ab/
 │       │   └── store/           # 클라이언트 상태
 │       └── tests/
 │
-├── test-unit-data.json
+├── packages/metadata/data/
+│   ├── units.json              # 유닛 데이터 단일 소스
+│   ├── weapons.json            # 무기 데이터 단일 소스
+│   └── unit-passives.json      # 패시브 데이터 단일 소스
 └── package.json                 # 모노레포 루트 (pnpm workspaces)
 ```
 
