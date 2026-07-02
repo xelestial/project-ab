@@ -201,7 +201,7 @@ src/
                                  #   - evaluateState: 0.4*유닛비 + 0.6*HP비
                                  #   - 즉시 승리 감지 (공격 후 전멸 체크)
                                  #   - getCandidateActionsForPlayer 분리
-                                 #   - 화재 유닛 extinguish 후보 포함
+                                 #   - 휴식(rest) 후보 포함 (체력 회복 + 상태이상 제거)
 ```
 
 ### packages/server
@@ -258,7 +258,7 @@ src/
 - **평가 함수**: `evaluateState()` = `0.4 * (내 유닛 수 / 전체) + 0.6 * (내 HP / 전체)`
 - **폴백 휴리스틱**: ActionProcessor 미주입 시 액션 타입별 고정 점수
 - **후보 생성 분리**: `getCandidateActionsForPlayer()` — 롤아웃 중 임의 플레이어 액션 생성
-- **화재 extinguish**: fire 효과 + 미공격 시 소화 후보 추가
+- **휴식(rest)**: 미공격 시 휴식 후보 추가 (이동 후 가능, 공격 대신; 체력 1 회복 + 전 상태이상 제거)
 
 ### Redis 연동 활성화 (Phase 3-1)
 - **`ioredis` 파이프라인**: `save`, `end`, `delete` 모두 파이프라인으로 원자적 실행

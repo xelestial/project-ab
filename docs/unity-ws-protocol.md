@@ -72,7 +72,7 @@ webSocket.SendText(JsonUtility.ToJson(new JoinMessage { type = "join", gameId = 
 | `move` | `unitId`, `destination` | 유닛 이동 |
 | `attack` | `unitId`, `target` | 유닛 공격 (`target`: `{row, col}`) |
 | `pass` | `unitId` | 턴 넘기기 |
-| `extinguish` | `unitId` | 화재 소화 |
+| `rest` | `unitId` | 휴식 — 체력 1 회복 + 모든 상태이상 제거 (턴 전체 소비) |
 | `skill` | `unitId`, `skillId`, `target?` | 스킬 사용 |
 | `draft_place` | `unitId`, `metaId`, `position` | 드래프트 배치 |
 

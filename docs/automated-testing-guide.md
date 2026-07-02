@@ -158,7 +158,7 @@ pnpm clean
 라운드 시작
   └─ 유닛 순서 드래프트  (모든 플레이어 동시, 30초 제한)
   └─ 턴 오더 생성        (우선권 규칙 적용)
-  └─ 유닛 액션 초기화    (moved/attacked/skillUsed/extinguished → false)
+  └─ 유닛 액션 초기화    (moved/attacked/skillUsed → false)
   └─ 슬롯별 턴 실행
 라운드 종료 → 승패 검사
 ```
@@ -202,7 +202,7 @@ pnpm clean
 | 이동만 | ✅ 허용 | 패스로 마감 |
 | 공격만 | ✅ 허용 | 즉시 턴 종료 |
 | 스킬(공격형) | ✅ 허용 | `attacked + skillUsed = true` 처리 |
-| 화재 진화 | ✅ 허용 | `moved + attacked + extinguished = true` (턴 전체 소모) |
+| 휴식 | ✅ 허용 | 미공격(`!attacked`)일 때만 (이동 후 가능), 공격 대신 — 체력 1 회복 + 전 상태이상 제거, 턴 종료 |
 | 패스 | ✅ 허용 | 즉시 턴 종료 |
 
 **서브 루프 자동 종료 조건:**
@@ -242,12 +242,12 @@ pnpm clean
 
 | 효과 | 지속 | 행동 제한 | 제거 조건 |
 |---|---|---|---|
-| `freeze` | 1턴 | 이동·공격·스킬 전체 불가 | 1턴 경과 |
-| `fire` | 3턴 | 없음 | 3턴 경과 / `extinguish` 행동 / 강 진입 |
-| `acid` | 3턴 | 없음 | 3턴 경과 |
-| `electric` | 1턴 | 없음 | 1턴 경과 |
-| `water` | — | 없음 | 이동 시 제거(on_move) |
-| `sand` | — | 없음 | — |
+| `freeze` | 1턴 | 이동·공격·스킬 전체 불가 | 1턴 경과 / 빙결 유닛과 충돌 |
+| `fire` | 3턴 | 없음 | 3턴 경과 / `rest` 행동 / 강 진입 |
+| `acid` | 3턴 | 없음 (**지속 피해 없음**, 받는 피해 ×2) | 3턴 경과 / `rest` 행동 / 강 진입 |
+| `electric` | 1턴 | 없음 | 1턴 경과 / `rest` 행동 |
+| `water` | — | 없음 | 이동 시 제거(on_move) / `rest` 행동 |
+| `sand` | — | 없음 | 이동 시 제거(on_move) / `rest` 행동 |
 
 화재 상태 유닛이 강(river) 타일 진입 시 `fire` 효과 즉시 해제.
 
@@ -492,7 +492,7 @@ function makeUnit(
     currentArmor: 0,
     movementPoints: 3,
     activeEffects: [],
-    actionsUsed: { moved: false, attacked: false, skillUsed: false, extinguished: false },
+    actionsUsed: { moved: false, attacked: false, skillUsed: false },
     alive: true,
   };
 }
@@ -870,8 +870,8 @@ npx vitest run
 | `ATTACK_OUT_OF_RANGE` | attack-validator | 사거리 밖 타겟 |
 | `ATTACK_NO_LOS` | attack-validator | 포격 무기 시야 확보 실패 |
 | `SKILL_ALREADY_USED` | action-processor | 스킬 이미 사용됨 |
-| `EXTINGUISH_ALREADY_ACTED` | action-processor | 이미 행동한 유닛에 진화 시도 |
-| `EXTINGUISH_NOT_ON_FIRE` | action-processor | 화재 상태가 아닌 유닛 진화 시도 |
+| `REST_ALREADY_ACTED` | action-processor | 이미 공격한 유닛이 휴식 시도 (이동 후 휴식은 허용) |
+| `REST_FROZEN` | action-processor | 빙결 상태 유닛이 휴식 시도 (행동 불가) |
 | `TURN_INVALID_PHASE` | action-processor | 전투 페이즈가 아닌 상태에서 전투 행동 |
 
 ---

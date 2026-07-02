@@ -37,7 +37,7 @@ type ActionType =
   | "move"
   | "attack"
   | "skill"
-  | "extinguish"    // 화염 해제 (턴 전체 소비)
+  | "rest"          // 휴식: 체력 1 회복 + 모든 상태이상 제거 (턴 전체 소비)
   | "pass"          // 아무것도 하지 않고 턴 종료
   | "draft_place"   // 드래프트 슬롯 배치
 
@@ -118,7 +118,7 @@ interface WeaponMeta {
 interface KnockbackSpec {
   type: "push" | "pull"
   distance: number            // 기본 1
-  damage: number              // 충돌 데미지 (기본 1)
+  damage: number              // 충돌 데미지 (기본 1, 충돌 시 밀린 유닛·막는 유닛 양쪽에 각각 적용)
 }
 
 interface AreaSpec {
@@ -261,7 +261,7 @@ interface ActionsUsed {
   readonly moved: boolean
   readonly attacked: boolean
   readonly usedSkill: boolean
-  readonly extinguished: boolean
+  // 휴식(rest)은 별도 플래그 불필요 — 즉시 턴을 종료하며 "이번 턴 미공격"(이동 후 가능)일 때 사용
 }
 ```
 
@@ -445,7 +445,7 @@ type GameAction =
   | MoveAction
   | AttackAction
   | SkillAction
-  | ExtinguishAction
+  | RestAction
   | PassAction
 
 interface MoveAction {
@@ -469,10 +469,10 @@ interface SkillAction {
   targetUnitId?: UnitId
 }
 
-interface ExtinguishAction {
-  type: "extinguish"
+interface RestAction {
+  type: "rest"
   unitId: UnitId
-  // 이동 + 공격 모두 포기하고 화염 해제
+  // 공격 대신 휴식: 체력 1 회복 + 자신의 모든 상태이상 제거. 이동은 먼저 가능, 사용 시 즉시 턴 종료.
 }
 
 interface PassAction {
@@ -650,7 +650,7 @@ type RemoveReason =
   | "water_tile_entry"
   | "freeze_applied"
   | "water_attack"
-  | "self_extinguish"   // 화염만 가능
+  | "rest"              // 휴식: 모든 상태이상 제거 (화염 포함 전부)
   | "skill"
   | "river_entry"
 ```
@@ -1591,8 +1591,8 @@ const GAME_ERRORS = {
   "error.draft.not_your_unit":     "자신의 유닛이 아닙니다",
   "error.draft.already_placed":    "이미 배치된 유닛입니다",
 
-  // 화염 해제
-  "error.extinguish.no_fire":      "화염 효과가 없습니다",
-  "error.extinguish.frozen":       "빙결 상태에서는 행동할 수 없습니다",
+  // 휴식
+  "error.rest.already_acted":      "이미 이동하거나 공격해서 휴식할 수 없습니다",
+  "error.rest.frozen":             "빙결 상태에서는 행동할 수 없습니다",
 } as const
 ```

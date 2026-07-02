@@ -1,0 +1,516 @@
+<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8">
+<title>Project AB — 룰북</title><style>
+@page { size: A4; margin: 0; }
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: "AppleSDGothicNeo-Regular","Apple SD Gothic Neo","Noto Sans KR",sans-serif;
+  color: #2B2622; line-height: 1.6; font-size: 10.5pt;
+}
+.page {
+  width: 210mm; height: 297mm; padding: 16mm 15mm 14mm; position: relative;
+  background: #FBF6EC; overflow: hidden; page-break-after: always;
+}
+.page::after {
+  content: ""; position: absolute; inset: 0;
+  background:
+    radial-gradient(circle at 12% 8%, rgba(184,137,59,.06), transparent 45%),
+    radial-gradient(circle at 88% 92%, rgba(158,43,37,.05), transparent 45%);
+  pointer-events: none;
+}
+.pageno { position: absolute; bottom: 7mm; right: 15mm; font-size: 9pt; color: #B8893B; font-weight: 700; }
+.pagefoot { position: absolute; bottom: 7mm; left: 15mm; font-size: 8pt; color: #A8987C; letter-spacing: 1px; text-transform: uppercase; }
+
+h1,h2,h3 { font-family: "AppleSDGothicNeo-Bold","Apple SD Gothic Neo",sans-serif; font-weight: 800; }
+
+/* 섹션 헤더 */
+.sec-tag { display:inline-block; background:#9E2B25; color:#FBF6EC; font-weight:800;
+  padding: 3px 12px; border-radius: 3px; font-size: 11pt; letter-spacing: 2px; }
+.sec-h { font-size: 22pt; color:#3A2E25; margin: 8px 0 2px; letter-spacing:-.5px; }
+.sec-rule { height: 3px; background: linear-gradient(90deg,#B8893B,transparent); margin: 4px 0 14px; }
+h3.sub { font-size: 13pt; color:#9E2B25; margin: 14px 0 5px; border-left: 4px solid #B8893B; padding-left: 8px; }
+
+.cols { column-count: 2; column-gap: 9mm; }
+p { margin-bottom: 7px; text-align: justify; }
+ul { margin: 4px 0 9px 18px; }
+li { margin-bottom: 4px; }
+b, strong { color: #9E2B25; }
+.kw { font-weight: 800; color: #3A2E25; }
+
+/* 콜아웃 박스 */
+.box { break-inside: avoid; border-radius: 8px; padding: 11px 13px; margin: 9px 0;
+  border: 1.5px solid; }
+.box .bt { font-weight: 800; font-size: 10.5pt; display:block; margin-bottom: 3px; }
+.tip { background: #FBF0CE; border-color: #B8893B; }
+.tip .bt { color: #8A6512; }
+.warn { background: #FBE3DC; border-color: #9E2B25; }
+.warn .bt { color: #9E2B25; }
+.ex { background: #E7EFE2; border-color: #6E8C4E; }
+.ex .bt { color: #4C6634; }
+
+/* 표 */
+table { width: 100%; border-collapse: collapse; margin: 8px 0; font-size: 9.5pt; break-inside: avoid; }
+th { background: #3A2E25; color: #FBF6EC; padding: 6px 8px; text-align: left; font-weight: 700; }
+td { padding: 5px 8px; border-bottom: 1px solid #DDD1BB; }
+tr:nth-child(even) td { background: #F6EFE0; }
+
+/* 유닛 카드 */
+.ucard { break-inside: avoid; border: 2px solid #3A2E25; border-radius: 12px; overflow: hidden;
+  margin-bottom: 9px; background: #FBF6EC; box-shadow: 2px 3px 0 rgba(58,46,37,.12); }
+.uhead { display:flex; align-items:center; gap: 10px; padding: 9px 12px; color: #FBF6EC; }
+.uemblem { background: rgba(255,255,255,.18); border-radius: 10px; padding: 3px; }
+.uname { font-size: 15pt; font-weight: 800; line-height:1.1; }
+.uen { font-size: 8pt; opacity: .8; letter-spacing: 1px; text-transform: uppercase; }
+.uclass { margin-left:auto; background: rgba(0,0,0,.22); padding: 3px 10px; border-radius: 20px;
+  font-size: 9pt; font-weight: 700; }
+.ubody { padding: 9px 12px; }
+.ustats { display:flex; gap: 14px; align-items:center; margin-bottom: 7px; flex-wrap: wrap; }
+.ustat { font-size: 8.5pt; color:#6B5E4C; font-weight:700; text-transform:uppercase; letter-spacing:.5px; }
+.ustat span { display:block; }
+.uweap { background:#F1E8D6; border-radius:6px; padding: 6px 9px; margin-bottom: 7px; font-size: 9.5pt; }
+.uweap b { color:#3A2E25; }
+.uab { margin-bottom: 5px; font-size: 9.3pt; }
+.uab .an { font-weight:800; color:#9E2B25; }
+.uflav { font-style: italic; color:#7A6A54; font-size: 9pt; border-top: 1px dashed #C9BBA0; padding-top:6px; margin-top: 6px; }
+
+/* 표지 */
+.cover { background: linear-gradient(160deg,#241C16,#3A2E25 55%,#4A2420); color:#F4EDE0;
+  display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; }
+.cover::after { display:none; }
+.cover .badge { letter-spacing: 7px; font-size: 12pt; color:#B8893B; font-weight:700; margin-bottom: 20px; }
+.cover h1 { font-size: 56pt; letter-spacing: 2px; line-height:.98;
+  background: linear-gradient(180deg,#F4EDE0,#C9A765); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+.cover .sub { font-size: 17pt; color:#D9C9A8; margin-top: 8px; letter-spacing: 4px; }
+.cover .ornament { width: 220px; height: 2px; background: linear-gradient(90deg,transparent,#B8893B,transparent); margin: 26px 0; }
+.cover .meta { display:flex; gap: 34px; margin-top: 8px; }
+.cover .meta div { text-align:center; }
+.cover .meta .v { font-size: 26pt; font-weight:800; color:#B8893B; }
+.cover .meta .l { font-size: 9pt; letter-spacing:2px; color:#B9A988; text-transform:uppercase; }
+.cover .foot { position:absolute; bottom: 18mm; font-size: 9pt; color:#8A7B5E; letter-spacing:2px; }
+
+/* 토큰/속성 카드 */
+.elgrid { display:grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.elcard { break-inside:avoid; border-radius:8px; padding: 9px 11px; border:1.5px solid; }
+.elcard .eh { display:flex; align-items:center; gap:7px; font-weight:800; font-size:11pt; margin-bottom:3px; }
+.elcard .ed { font-size: 9pt; }
+
+.toc { font-size: 11.5pt; }
+.toc .row { display:flex; align-items:baseline; margin-bottom: 9px; }
+.toc .num { color:#9E2B25; font-weight:800; width: 30px; }
+.toc .ttl { font-weight:600; }
+.toc .dots { flex:1; border-bottom: 2px dotted #C9BBA0; margin: 0 6px 4px; }
+.toc .pg { color:#B8893B; font-weight:800; }
+
+.lead { font-size: 11.5pt; color:#3A2E25; }
+.dropcap::first-letter { font-size: 34pt; font-weight:800; color:#9E2B25; float:left; line-height:.8; padding: 4px 7px 0 0; }
+
+.flow { display:flex; flex-direction:column; gap:0; margin: 6px 0; }
+.fstep { background:#F1E8D6; border:1.5px solid #B8893B; border-radius:8px; padding:8px 12px; position:relative; }
+.fstep b { color:#3A2E25; }
+.farrow { text-align:center; color:#B8893B; font-size:14pt; line-height:1.1; }
+
+.kbd { display:inline-block; background:#3A2E25; color:#FBF6EC; border-radius:4px; padding:1px 7px; font-size:9pt; font-weight:700; }
+</style></head>
+<body><div class="page cover">
+<div class="badge">전 술 · 원 소 · 전 략</div>
+<h1>PROJECT AB</h1>
+<div class="sub">전선의 지배자</div>
+<div class="ornament"></div>
+<div style="max-width:380px;font-size:11pt;color:#CBB99A;line-height:1.7">
+격자 전장 위에서 펼쳐지는 2인 전술 보드게임.<br>
+유닛을 징집하고, 지형을 무기로 바꾸고, 적을 전멸시켜라.
+</div>
+<div class="meta">
+  <div><div class="v">2</div><div class="l">플레이어</div></div>
+  <div><div class="v">30~60</div><div class="l">분</div></div>
+  <div><div class="v">12+</div><div class="l">연령</div></div>
+  <div><div class="v">8</div><div class="l">유닛</div></div>
+</div>
+<div class="foot">— 공식 규칙서 · RULEBOOK —</div>
+</div><div class="page">
+<div class="sec-tag">들어가며</div><div class="sec-h">환영합니다, 지휘관</div><div class="sec-rule"></div>
+<div class="cols">
+<p class="lead dropcap"><b>Project AB</b>는 16×16 격자 전장에서 두 지휘관이 맞붙는
+턴제 전술 보드게임입니다. 당신은 서로 다른 개성을 지닌 유닛들을 징집해 배치하고,
+한 명씩 번갈아 움직이며 적을 쓰러뜨립니다.</p>
+<p>단순한 힘싸움이 아닙니다. 전장의 <b>지형</b> 자체가 무기입니다. 불을 붙이고, 물로
+끄고, 산성으로 녹이고, 얼음으로 가두세요. 적을 강물에 빠뜨려 모든 것을 씻어내거나,
+좁은 길목에서 관통 화살로 일렬의 적을 꿰뚫으세요.</p>
+<p>이 규칙서는 처음 플레이하는 분도 한 판을 끝까지 진행할 수 있도록, 게임의 흐름을
+순서대로 안내합니다. 막히는 부분이 있으면 마지막의 <b>「한눈에 보는 요약」</b>을
+펼쳐 보세요.</p>
+<div class="box tip"><span class="bt">◆ 첫 게임 팁</span>
+처음에는 특수 능력이 적은 <span class="kw">돌격대원</span>과 <span class="kw">화살사수</span>
+위주로 징집해 기본 흐름(이동→공격)에 익숙해진 뒤, 탱커와 브루트의 지형 능력을 더해
+보는 것을 추천합니다.</div>
+<h3 class="sub" style="margin-top:0">목 차</h3><div class="row"><span class="num">1</span><span class="ttl">게임 개요와 목표</span><span class="dots"></span><span class="pg">3</span></div><div class="row"><span class="num">2</span><span class="ttl">구성물</span><span class="dots"></span><span class="pg">3</span></div><div class="row"><span class="num">3</span><span class="ttl">게임 준비 — 징집</span><span class="dots"></span><span class="pg">4</span></div><div class="row"><span class="num">4</span><span class="ttl">라운드의 흐름</span><span class="dots"></span><span class="pg">4</span></div><div class="row"><span class="num">5</span><span class="ttl">유닛의 턴 — 이동과 공격</span><span class="dots"></span><span class="pg">5</span></div><div class="row"><span class="num">6</span><span class="ttl">이동 규칙</span><span class="dots"></span><span class="pg">5</span></div><div class="row"><span class="num">7</span><span class="ttl">공격 규칙</span><span class="dots"></span><span class="pg">6</span></div><div class="row"><span class="num">8</span><span class="ttl">속성과 원소 반응</span><span class="dots"></span><span class="pg">7</span></div><div class="row"><span class="num">9</span><span class="ttl">상태 효과 토큰</span><span class="dots"></span><span class="pg">8</span></div><div class="row"><span class="num">10</span><span class="ttl">지형 타일 안내</span><span class="dots"></span><span class="pg">9</span></div><div class="row"><span class="num">11</span><span class="ttl">유닛 도감</span><span class="dots"></span><span class="pg">10</span></div><div class="row"><span class="num">12</span><span class="ttl">승리 조건</span><span class="dots"></span><span class="pg">12</span></div><div class="row"><span class="num">13</span><span class="ttl">한눈에 보는 요약</span><span class="dots"></span><span class="pg">12</span></div>
+</div>
+<div class="pageno">2</div><div class="pagefoot">PROJECT AB · 룰북</div></div><div class="page">
+<div class="sec-tag">1 · 2</div><div class="sec-h">목표와 구성물</div><div class="sec-rule"></div>
+<h3 class="sub" style="margin-top:0">게임의 목표</h3>
+<p>상대 진영의 <b>모든 유닛을 전멸</b>시키면 즉시 승리합니다. 만약 <b>30라운드</b>가
+끝날 때까지 승부가 나지 않으면, <b>살아남은 유닛이 더 많은 쪽</b>이 승리하며, 수가
+같으면 무승부입니다.</p>
+
+<h3 class="sub">구성물</h3>
+<table><tr><th style="width:32%">구성물</th><th>내용</th></tr><tr><td><b>게임판</b></td><td>16×16 격자 전장 보드 1개</td></tr><tr><td><b>유닛 미니어처</b></td><td>8종 (탱커 2 · 전사 2 · 레인저 2 · 브루트 2)</td></tr><tr><td><b>유닛 카드</b></td><td>각 유닛의 능력치와 능력이 적힌 참조 카드 8장</td></tr><tr><td><b>지형 타일</b></td><td>산 · 모래 · 강 · 물 · 불 · 산성 · 감전 · 빙결</td></tr><tr><td><b>속성 토큰</b></td><td>화염 · 산성 · 감전 · 빙결 · 물 · 모래 상태 토큰</td></tr><tr><td><b>체력 다이얼</b></td><td>유닛별 현재 체력 표시</td></tr><tr><td><b>라운드 트랙</b></td><td>1~30 라운드 카운터 + 선공 표식</td></tr></table>
+
+<div class="box warn"><span class="bt">⚠ 격자 좌표 읽는 법</span>
+이 책에서 칸은 <span class="kw">(행, 열)</span>로 표기합니다. 행은 위→아래, 열은
+왼쪽→오른쪽입니다. 두 칸의 거리는 가로·세로로만 세며(<b>대각선은 세지 않습니다</b>),
+이를 <span class="kw">직교 거리</span>라 부릅니다.</p></div>
+
+<div class="ex box"><span class="bt">▷ 한 판의 큰 그림</span>
+① 유닛을 <b>징집·배치</b>(준비) → ② 매 라운드 <b>행동 순서</b>를 정함 →
+③ 순서대로 유닛이 <b>이동·공격</b> → ④ 한쪽이 전멸하거나 30라운드 종료 시 <b>승부</b>.</div>
+<div class="pageno">3</div><div class="pagefoot">PROJECT AB · 룰북</div></div><div class="page">
+<div class="sec-tag">3 · 4</div><div class="sec-h">징집과 라운드</div><div class="sec-rule"></div>
+<div class="cols">
+<h3 class="sub" style="margin-top:0">게임 준비 — 징집</h3>
+<p>게임을 시작하면 두 지휘관은 <b>동시에</b> 자신의 유닛을 고릅니다. 각자 최대
+<b>6기</b>까지 징집할 수 있습니다.</p>
+<ul>
+<li>같은 종류의 유닛을 <b>한 지휘관이 중복</b>으로 뽑을 수는 없습니다. (단, 상대와
+겹치는 것은 괜찮습니다.)</li>
+<li>고른 유닛은 자신에게 배정된 <b>출발 구역</b>의 칸에만 놓을 수 있습니다.</li>
+<li>이미 유닛이 있는 칸에는 놓을 수 없습니다.</li>
+</ul>
+<div class="box tip"><span class="bt">◆ 균형 잡힌 편성</span>
+앞을 막아줄 <span class="kw">탱커</span> 1기, 적을 줄여줄 <span class="kw">레인저</span>
+1기는 거의 항상 좋은 선택입니다. 나머지는 취향껏!</div>
+
+<h3 class="sub">라운드의 흐름</h3>
+<p>전투는 <b>라운드</b>를 반복하며 진행됩니다. 매 라운드는 다음 순서를 따릅니다.</p>
+<div class="flow">
+<div class="fstep"><b>① 행동 순서 정하기</b><br>두 지휘관이 동시에 자기 유닛의
+순서를 제출합니다. 두 진영의 유닛이 <b>번갈아(교차로)</b> 행동하게 배치됩니다.</div>
+<div class="farrow">▼</div>
+<div class="fstep"><b>② 라운드 시작</b><br>모든 유닛의 이동력이 회복되고, 이번 라운드의
+행동 권리(이동 1회·공격 1회)가 새로 주어집니다.</div>
+<div class="farrow">▼</div>
+<div class="fstep"><b>③ 턴 진행</b><br>정해진 순서대로 유닛이 하나씩 행동합니다.
+이미 쓰러진 유닛의 차례는 건너뜁니다.</div>
+<div class="farrow">▼</div>
+<div class="fstep"><b>④ 라운드 종료</b><br>모든 차례가 끝나면 라운드 수가 1 오르고,
+다시 ①로 돌아갑니다. (최대 30라운드)</div>
+</div>
+<div class="box ex"><span class="bt">▷ 선공은 번갈아</span>
+첫 라운드의 선공은 동전으로 정하고, 이후로는 <b>매 라운드 선공이 교대</b>됩니다.</div>
+</div>
+<div class="pageno">4</div><div class="pagefoot">PROJECT AB · 룰북</div></div><div class="page">
+<div class="sec-tag">5 · 6</div><div class="sec-h">유닛의 턴과 이동</div><div class="sec-rule"></div>
+<div class="cols">
+<h3 class="sub" style="margin-top:0">한 턴에 할 수 있는 일</h3>
+<p>자기 차례가 된 유닛은 <b>이동 1회</b>와 <b>공격 1회</b>를 할 수 있습니다. 중요한
+규칙 세 가지:</p>
+<ul>
+<li><b>이동 후 공격은 가능</b>하지만, <b>공격 후 이동은 불가능</b>합니다.</li>
+<li><b>공격을 하면 그 즉시 턴이 끝납니다.</b></li>
+<li>아무것도 하지 않고 <span class="kbd">패스</span>로 턴을 넘길 수도 있습니다.</li>
+</ul>
+<div class="box warn"><span class="bt">⚠ 빙결 상태</span>
+<b>빙결</b> 토큰이 있는 유닛은 이동도 공격도 할 수 없습니다. 풀릴 때까지 한 턴을
+통째로 쉽니다.</div>
+
+<h3 class="sub">이동 규칙</h3>
+<p>유닛은 자신의 <b>이동력</b>만큼 칸을 옮길 수 있습니다. 이동은 <b>상하좌우</b>로만
+가능하며 <b>대각선은 안 됩니다</b>. 칸마다 들어가는 데 필요한 이동력이 다릅니다.</p>
+<ul>
+<li>평지·도로·대부분의 속성 칸: <b>1</b></li>
+<li>모래·강: <b>2</b></li>
+<li><b>산</b>: 들어갈 수 없음 (지나갈 수도 없음)</li>
+</ul>
+<p>다른 유닛이 있는 칸은 <b>지나갈 수도, 멈출 수도 없습니다</b>. 강은 <b>지나갈 수는
+있어도 그 위에서 멈출 수는 없습니다</b>.</p>
+<div style="break-inside:avoid;text-align:center;margin-top:6px">
+<svg viewBox="0 0 246 246" width="100%" style="max-width:246px"><rect x="0" y="0" width="246" height="246" fill="#FBF6EC" rx="6"/><rect x="5" y="5" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="39" y="5" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="73" y="5" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="107" y="5" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="141" y="5" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="175" y="5" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="209" y="5" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="5" y="39" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="39" y="39" width="32" height="32" fill="#7A8794" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><text x="55.0" y="60.0" text-anchor="middle" font-size="15" font-weight="700" fill="#2B2622">산</text><rect x="73" y="39" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="107" y="39" width="32" height="32" fill="#DCEAF7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="141" y="39" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="175" y="39" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="209" y="39" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="5" y="73" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="39" y="73" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="73" y="73" width="32" height="32" fill="#DCEAF7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="107" y="73" width="32" height="32" fill="#DCEAF7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="141" y="73" width="32" height="32" fill="#DCEAF7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="175" y="73" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="209" y="73" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="5" y="107" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="39" y="107" width="32" height="32" fill="#DCEAF7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="73" y="107" width="32" height="32" fill="#DCEAF7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="107" y="107" width="32" height="32" fill="#C0552F" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><text x="123.0" y="128.0" text-anchor="middle" font-size="15" font-weight="700" fill="#2B2622">유</text><rect x="141" y="107" width="32" height="32" fill="#DCEAF7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="175" y="107" width="32" height="32" fill="#DCEAF7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="209" y="107" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="5" y="141" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="39" y="141" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="73" y="141" width="32" height="32" fill="#DCEAF7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="107" y="141" width="32" height="32" fill="#DCEAF7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="141" y="141" width="32" height="32" fill="#DCEAF7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="175" y="141" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="209" y="141" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="5" y="175" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="39" y="175" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="73" y="175" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="107" y="175" width="32" height="32" fill="#DCEAF7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="141" y="175" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="175" y="175" width="32" height="32" fill="#2D7DD2" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><text x="191.0" y="196.0" text-anchor="middle" font-size="15" font-weight="700" fill="#2B2622">강</text><rect x="209" y="175" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="5" y="209" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="39" y="209" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="73" y="209" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="107" y="209" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="141" y="209" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="175" y="209" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="209" y="209" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/></svg>
+<div style="font-size:8.5pt;color:#7A6A54;margin-top:3px">▲ 가운데 <b>유</b>닛이 갈 수 있는 칸(연파랑). 산은 막히고, 강 위엔 멈출 수 없다.</div>
+</div>
+</div>
+<div class="pageno">5</div><div class="pagefoot">PROJECT AB · 룰북</div></div><div class="page">
+<div class="sec-tag">7</div><div class="sec-h">공격 규칙</div><div class="sec-rule"></div>
+<div class="cols">
+<p class="lead">공격은 <b>상하좌우 직선</b>으로만 날아갑니다. 대각선 방향의 적은 공격할
+수 없습니다. 무기마다 <b>사거리</b>(최소~최대)가 정해져 있습니다.</p>
+
+<h3 class="sub">공격 방식 세 가지</h3>
+<ul>
+<li><b>근거리</b> — 별다른 제약 없이 사거리 안의 적을 친다.</li>
+<li><b>원거리</b> — 시야 제약이 없다. 사거리 안이면 장애물 너머도 조준 가능.</li>
+<li><b>곡사(포격)</b> — 나와 적 <b>사이에 장애물</b>(유닛 또는 산)이 하나 이상 있어야
+쏠 수 있다.</li>
+</ul>
+
+<div style="break-inside:avoid;text-align:center;margin:4px 0">
+<svg viewBox="0 0 246 246" width="100%" style="max-width:246px"><rect x="0" y="0" width="246" height="246" fill="#FBF6EC" rx="6"/><rect x="5" y="5" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="39" y="5" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="73" y="5" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="107" y="5" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="141" y="5" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="175" y="5" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="209" y="5" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="5" y="39" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="39" y="39" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><text x="55.0" y="60.0" text-anchor="middle" font-size="15" font-weight="700" fill="#2B2622">✕</text><rect x="73" y="39" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="107" y="39" width="32" height="32" fill="#FBE3DC" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="141" y="39" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="175" y="39" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><text x="191.0" y="60.0" text-anchor="middle" font-size="15" font-weight="700" fill="#2B2622">✕</text><rect x="209" y="39" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="5" y="73" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="39" y="73" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="73" y="73" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="107" y="73" width="32" height="32" fill="#FBE3DC" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="141" y="73" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="175" y="73" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="209" y="73" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="5" y="107" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="39" y="107" width="32" height="32" fill="#FBE3DC" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="73" y="107" width="32" height="32" fill="#FBE3DC" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="107" y="107" width="32" height="32" fill="#5E7C3A" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><text x="123.0" y="128.0" text-anchor="middle" font-size="15" font-weight="700" fill="#2B2622">사</text><rect x="141" y="107" width="32" height="32" fill="#FBE3DC" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="175" y="107" width="32" height="32" fill="#FBE3DC" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="209" y="107" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="5" y="141" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="39" y="141" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="73" y="141" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="107" y="141" width="32" height="32" fill="#FBE3DC" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="141" y="141" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="175" y="141" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="209" y="141" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="5" y="175" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="39" y="175" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="73" y="175" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="107" y="175" width="32" height="32" fill="#FBE3DC" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="141" y="175" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="175" y="175" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><text x="191.0" y="196.0" text-anchor="middle" font-size="15" font-weight="700" fill="#2B2622">✕</text><rect x="209" y="175" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="5" y="209" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="39" y="209" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="73" y="209" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="107" y="209" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="141" y="209" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="175" y="209" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="209" y="209" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/></svg>
+<div style="font-size:8.5pt;color:#7A6A54;margin-top:3px">▲ <b>사</b>수는 상하좌우 직선만 공격(분홍). 대각선(✕)은 불가.</div>
+</div>
+
+<h3 class="sub">특수 공격</h3>
+<p><b>관통</b> — 첫 대상을 꿰뚫고 같은 직선의 뒷칸 적까지 모두 피해를 줍니다. 단
+<span class="kw">방패</span> 유닛에 막히면 그 뒤로는 뚫지 못합니다.</p>
+<div style="break-inside:avoid;text-align:center;margin:4px 0">
+<svg viewBox="0 0 246 178" width="100%" style="max-width:246px"><rect x="0" y="0" width="246" height="178" fill="#FBF6EC" rx="6"/><rect x="5" y="5" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="39" y="5" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="73" y="5" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="107" y="5" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="141" y="5" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="175" y="5" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="209" y="5" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="5" y="39" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="39" y="39" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="73" y="39" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="107" y="39" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="141" y="39" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="175" y="39" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="209" y="39" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="5" y="73" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="39" y="73" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="73" y="73" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="107" y="73" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="141" y="73" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="175" y="73" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="209" y="73" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="5" y="107" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="39" y="107" width="32" height="32" fill="#5E7C3A" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><text x="55.0" y="128.0" text-anchor="middle" font-size="15" font-weight="700" fill="#2B2622">사</text><rect x="73" y="107" width="32" height="32" fill="#FBE3DC" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="107" y="107" width="32" height="32" fill="#E2492B" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><text x="123.0" y="128.0" text-anchor="middle" font-size="15" font-weight="700" fill="#2B2622">적</text><rect x="141" y="107" width="32" height="32" fill="#E2492B" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><text x="157.0" y="128.0" text-anchor="middle" font-size="15" font-weight="700" fill="#2B2622">적</text><rect x="175" y="107" width="32" height="32" fill="#E2492B" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><text x="191.0" y="128.0" text-anchor="middle" font-size="15" font-weight="700" fill="#2B2622">적</text><rect x="209" y="107" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="5" y="141" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="39" y="141" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="73" y="141" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="107" y="141" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="141" y="141" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="175" y="141" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/><rect x="209" y="141" width="32" height="32" fill="#EFE7D7" stroke="#C9BBA0" stroke-width="1.2" rx="3"/></svg>
+<div style="font-size:8.5pt;color:#7A6A54;margin-top:3px">▲ 관통 화살은 일렬의 <b>적</b> 셋을 한 번에 꿰뚫는다.</div>
+</div>
+<p><b>돌진</b> — 멀리 있는 적에게 달려가 친다(길이 비어 있어야 함).
+<b>넉백</b> — 친 뒤 대상을 밀어낸다. <b>끌어당기기</b> — 적을 내 앞으로 끌어온다.</p>
+
+<div class="box warn"><span class="bt">⚠ 피해와 아머</span>
+입히는 피해는 <b>무기 피해 − 대상의 아머</b>입니다(최소 0). 아머 1인 탱커는 피해 1
+공격을 <b>완전히 막아냅니다</b>.</div>
+
+<div class="box ex"><span class="bt">▷ 충돌 — 양쪽이 아프다</span>
+밀려난 유닛이 <b>다른 유닛에 부딪히면</b>, 더 이상 밀려나지 못하고 <b>밀린 쪽과 부딪힌
+쪽 양쪽이 각각 1 피해</b>를 받습니다. 부딪힌 상대가 <b>빙결</b> 상태였다면 그 충격으로
+빙결이 깨집니다(그래도 1 피해는 받음). 벽·산에 부딪히면 피해 없이 멈추고, <b>강</b>에
+부딪혀 빠지면 모든 상태가 씻겨 나갑니다.</div>
+</div>
+<div class="pageno">6</div><div class="pagefoot">PROJECT AB · 룰북</div></div><div class="page">
+<div class="sec-tag">8</div><div class="sec-h">속성과 원소 반응</div><div class="sec-rule"></div>
+<p class="lead">전장의 진짜 묘미는 <b>속성</b>입니다. 속성 공격은 적에게 상태를 입히고,
+맞은 <b>칸까지 그 속성으로 물들입니다</b>. 물든 칸 위의 유닛은 다시 그 영향을 받죠.</p>
+
+<div class="elgrid" style="margin:10px 0"><div class="elcard" style="background:#FBE3DC;border-color:#E2492B"><div class="eh" style="color:#E2492B"><svg viewBox="0 0 30 30" width="26" height="26" style="vertical-align:middle"><circle cx="15" cy="15" r="14" fill="#E2492B" stroke="#2B2622" stroke-width="1.5"/><path d="M15 4 Q22 12 18 18 Q24 16 22 24 Q21 27 15 27 Q9 27 8 22 Q7 17 12 14 Q10 10 15 4 Z" fill="#fff"/></svg> 화염</div><div class="ed">맞은 적에게 화염을 붙인다. 칸을 불바다로 만든다.</div></div><div class="elcard" style="background:#DCEAF7;border-color:#2D7DD2"><div class="eh" style="color:#2D7DD2"><svg viewBox="0 0 30 30" width="26" height="26" style="vertical-align:middle"><circle cx="15" cy="15" r="14" fill="#2D7DD2" stroke="#2B2622" stroke-width="1.5"/><path d="M15 4 Q24 17 24 22 A9 9 0 1 1 6 22 Q6 17 15 4 Z" fill="#fff"/></svg> 물</div><div class="ed">적의 화염을 끈다. 칸을 물로 적신다 (피해 효과는 없음).</div></div><div class="elcard" style="background:#E6F2D5;border-color:#76B82A"><div class="eh" style="color:#76B82A"><svg viewBox="0 0 30 30" width="26" height="26" style="vertical-align:middle"><circle cx="15" cy="15" r="14" fill="#76B82A" stroke="#2B2622" stroke-width="1.5"/><circle cx="15" cy="15" r="9" fill="#fff"/><circle cx="12" cy="13" r="2" fill="#76B82A"/><circle cx="18" cy="17" r="1.6" fill="#76B82A"/><circle cx="16" cy="11" r="1.2" fill="#76B82A"/></svg> 산성</div><div class="ed">적을 부식시킨다. 받는 피해가 2배가 된다!</div></div><div class="elcard" style="background:#FBF0CE;border-color:#EBB000"><div class="eh" style="color:#EBB000"><svg viewBox="0 0 30 30" width="26" height="26" style="vertical-align:middle"><circle cx="15" cy="15" r="14" fill="#EBB000" stroke="#2B2622" stroke-width="1.5"/><path d="M17 3 L8 17 H14 L12 27 L22 12 H15 Z" fill="#fff"/></svg> 감전</div><div class="ed">적을 감전시킨다. 매 턴 피해.</div></div><div class="elcard" style="background:#DBF1F5;border-color:#3FB6C9"><div class="eh" style="color:#3FB6C9"><svg viewBox="0 0 30 30" width="26" height="26" style="vertical-align:middle"><circle cx="15" cy="15" r="14" fill="#3FB6C9" stroke="#2B2622" stroke-width="1.5"/><path d="M15 3 V27 M5 9 L25 21 M25 9 L5 21" stroke="#fff" stroke-width="2.6" stroke-linecap="round"/><path d="M15 3 L12 7 M15 3 L18 7 M15 27 L12 23 M15 27 L18 23" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/></svg> 빙결</div><div class="ed">맞은 적을 얼린다. 한 턴 행동 불가.</div></div><div class="elcard" style="background:#F4E8D2;border-color:#C9933E"><div class="eh" style="color:#C9933E"><svg viewBox="0 0 30 30" width="26" height="26" style="vertical-align:middle"><circle cx="15" cy="15" r="14" fill="#C9933E" stroke="#2B2622" stroke-width="1.5"/><path d="M7 7 H23 L9 23 H23" fill="none" stroke="#fff" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/></svg> 모래</div><div class="ed">이동을 방해하는 모래. 칸 진입 비용이 높다.</div></div></div>
+
+<h3 class="sub">원소 반응 — 속성이 맞물릴 때</h3>
+<p>적이 이미 어떤 상태에 걸려 있을 때 특정 속성으로 공격하면 <b>반응</b>이 일어납니다.</p>
+<table>
+<tr><th>공격 속성</th><th>적의 상태</th><th>결과</th></tr>
+<tr><td><svg viewBox="0 0 30 30" width="20" height="20" style="vertical-align:middle"><circle cx="15" cy="15" r="14" fill="#E2492B" stroke="#2B2622" stroke-width="1.5"/><path d="M15 4 Q22 12 18 18 Q24 16 22 24 Q21 27 15 27 Q9 27 8 22 Q7 17 12 14 Q10 10 15 4 Z" fill="#fff"/></svg> 화염</td><td><svg viewBox="0 0 30 30" width="20" height="20" style="vertical-align:middle"><circle cx="15" cy="15" r="14" fill="#3FB6C9" stroke="#2B2622" stroke-width="1.5"/><path d="M15 3 V27 M5 9 L25 21 M25 9 L5 21" stroke="#fff" stroke-width="2.6" stroke-linecap="round"/><path d="M15 3 L12 7 M15 3 L18 7 M15 27 L12 23 M15 27 L18 23" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/></svg> 빙결</td>
+<td><b>빙결 해제</b> · 이 공격은 피해 0 (얼음을 녹일 뿐)</td></tr>
+<tr><td><svg viewBox="0 0 30 30" width="20" height="20" style="vertical-align:middle"><circle cx="15" cy="15" r="14" fill="#2D7DD2" stroke="#2B2622" stroke-width="1.5"/><path d="M15 4 Q24 17 24 22 A9 9 0 1 1 6 22 Q6 17 15 4 Z" fill="#fff"/></svg> 물</td><td><svg viewBox="0 0 30 30" width="20" height="20" style="vertical-align:middle"><circle cx="15" cy="15" r="14" fill="#E2492B" stroke="#2B2622" stroke-width="1.5"/><path d="M15 4 Q22 12 18 18 Q24 16 22 24 Q21 27 15 27 Q9 27 8 22 Q7 17 12 14 Q10 10 15 4 Z" fill="#fff"/></svg> 화염</td>
+<td><b>화염 제거</b> · 피해는 정상</td></tr>
+<tr><td><svg viewBox="0 0 30 30" width="20" height="20" style="vertical-align:middle"><circle cx="15" cy="15" r="14" fill="#3FB6C9" stroke="#2B2622" stroke-width="1.5"/><path d="M15 3 V27 M5 9 L25 21 M25 9 L5 21" stroke="#fff" stroke-width="2.6" stroke-linecap="round"/><path d="M15 3 L12 7 M15 3 L18 7 M15 27 L12 23 M15 27 L18 23" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/></svg> 빙결</td><td><svg viewBox="0 0 30 30" width="20" height="20" style="vertical-align:middle"><circle cx="15" cy="15" r="14" fill="#E2492B" stroke="#2B2622" stroke-width="1.5"/><path d="M15 4 Q22 12 18 18 Q24 16 22 24 Q21 27 15 27 Q9 27 8 22 Q7 17 12 14 Q10 10 15 4 Z" fill="#fff"/></svg> 화염</td>
+<td><b>화염 제거</b> · 이 공격은 피해 0</td></tr>
+</table>
+
+<div class="box warn"><span class="bt">⚠ 산성은 치명적</span>
+<b>산성</b> 상태의 적은 받는 모든 피해가 <b>2배</b>가 됩니다. 산성을 먼저 묻힌 뒤
+강하게 후려치는 콤보를 노리세요.</div>
+
+<div class="box ex"><span class="bt">▷ 콤보 예시</span>
+산성에 걸린 적(아머 0)을 피해 2 무기로 치면 → 2 × 2배 = <b>4 피해</b>! 체력 4 유닛이
+한 방에 쓰러집니다.</div>
+<div class="pageno">7</div><div class="pagefoot">PROJECT AB · 룰북</div></div><div class="page">
+<div class="sec-tag">9</div><div class="sec-h">상태 효과 토큰</div><div class="sec-rule"></div>
+<p class="lead">유닛이 받는 상태는 <b>토큰</b>으로 표시합니다. 각 유닛의 턴이 시작될 때
+지속 피해가 들어오고, 지속 시간이 1씩 줄어듭니다.</p>
+
+<table>
+<tr><th>상태</th><th>턴당 피해</th><th>지속</th><th>행동 제한</th><th>해제 방법</th></tr>
+<tr><td><svg viewBox="0 0 30 30" width="22" height="22" style="vertical-align:middle"><circle cx="15" cy="15" r="14" fill="#E2492B" stroke="#2B2622" stroke-width="1.5"/><path d="M15 4 Q22 12 18 18 Q24 16 22 24 Q21 27 15 27 Q9 27 8 22 Q7 17 12 14 Q10 10 15 4 Z" fill="#fff"/></svg> <b style='color:#E2492B'>화염</b></td><td>매 턴 1</td><td>3턴</td><td>없음</td><td style='font-size:8.7pt'>3턴 경과 · 휴식 · 물/얼음 반응 · 강물</td></tr><tr><td><svg viewBox="0 0 30 30" width="22" height="22" style="vertical-align:middle"><circle cx="15" cy="15" r="14" fill="#76B82A" stroke="#2B2622" stroke-width="1.5"/><circle cx="15" cy="15" r="9" fill="#fff"/><circle cx="12" cy="13" r="2" fill="#76B82A"/><circle cx="18" cy="17" r="1.6" fill="#76B82A"/><circle cx="16" cy="11" r="1.2" fill="#76B82A"/></svg> <b style='color:#76B82A'>산성</b></td><td>없음</td><td>3턴</td><td>받는 피해 2배</td><td style='font-size:8.7pt'>3턴 경과 · 휴식 · 강물</td></tr><tr><td><svg viewBox="0 0 30 30" width="22" height="22" style="vertical-align:middle"><circle cx="15" cy="15" r="14" fill="#EBB000" stroke="#2B2622" stroke-width="1.5"/><path d="M17 3 L8 17 H14 L12 27 L22 12 H15 Z" fill="#fff"/></svg> <b style='color:#EBB000'>감전</b></td><td>매 턴 1</td><td>1턴</td><td>없음</td><td style='font-size:8.7pt'>1턴 경과 · 휴식</td></tr><tr><td><svg viewBox="0 0 30 30" width="22" height="22" style="vertical-align:middle"><circle cx="15" cy="15" r="14" fill="#3FB6C9" stroke="#2B2622" stroke-width="1.5"/><path d="M15 3 V27 M5 9 L25 21 M25 9 L5 21" stroke="#fff" stroke-width="2.6" stroke-linecap="round"/><path d="M15 3 L12 7 M15 3 L18 7 M15 27 L12 23 M15 27 L18 23" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/></svg> <b style='color:#3FB6C9'>빙결</b></td><td>-</td><td>1턴</td><td>모든 행동 불가</td><td style='font-size:8.7pt'>1턴 경과 · 얼린 적과 충돌</td></tr><tr><td><svg viewBox="0 0 30 30" width="22" height="22" style="vertical-align:middle"><circle cx="15" cy="15" r="14" fill="#2D7DD2" stroke="#2B2622" stroke-width="1.5"/><path d="M15 4 Q24 17 24 22 A9 9 0 1 1 6 22 Q6 17 15 4 Z" fill="#fff"/></svg> <b style='color:#2D7DD2'>물</b></td><td>-</td><td>영구</td><td>없음</td><td style='font-size:8.7pt'>이동하면 사라짐 · 휴식</td></tr><tr><td><svg viewBox="0 0 30 30" width="22" height="22" style="vertical-align:middle"><circle cx="15" cy="15" r="14" fill="#C9933E" stroke="#2B2622" stroke-width="1.5"/><path d="M7 7 H23 L9 23 H23" fill="none" stroke="#fff" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/></svg> <b style='color:#C9933E'>모래</b></td><td>-</td><td>영구</td><td>없음</td><td style='font-size:8.7pt'>이동하면 사라짐 · 휴식</td></tr>
+</table>
+
+<div class="cols" style="margin-top:10px">
+<div class="box warn"><span class="bt">⚠ 빙결의 두 얼굴</span>
+<b>빙결</b>은 한 턴 동안 모든 행동을 막습니다. 새로 빙결이 걸리면 <b>기존 상태가 모두
+사라지고</b> 얼음만 남습니다. 또한 누군가 얼어붙은 유닛에게 밀려 <b>충돌</b>하면 그
+충격으로 빙결이 깨집니다.</div>
+
+<div class="box ex"><span class="bt">▷ 산성은 피해가 아니라 '취약'</span>
+산성은 <b>매 턴 피해를 주지 않습니다</b>. 대신 산성에 걸린 유닛은 <b>받는 모든 피해가 2배</b>가
+되고, <b>자기가 선 칸까지 산성</b>으로 변합니다(도망쳐도 발자국이 남죠).</div>
+
+<div class="box tip"><span class="bt">◆ 휴식으로 정비하라</span>
+어떤 유닛이든 공격 대신 <b>「휴식」</b>으로 <b>체력 1을 회복</b>하고 <b>자신의 모든 상태이상을
+한 번에 제거</b>할 수 있습니다. <b>이동을 먼저 한 뒤</b> 휴식해도 됩니다(공격만 못 함). 사용하면
+턴이 끝납니다. 단 빙결 중에는 아무 행동도 못 하므로 휴식으로 빙결은 풀 수 없습니다(다음 턴이면 녹음).</div>
+</div>
+<div class="pageno">8</div><div class="pagefoot">PROJECT AB · 룰북</div></div><div class="page">
+<div class="sec-tag">10</div><div class="sec-h">지형 타일 안내</div><div class="sec-rule"></div>
+<p class="lead">전장은 평지뿐이 아닙니다. 게임 시작 시 무작위로 깔리는 특수 지형들이
+전투의 양상을 바꿉니다. 공격으로 새 지형을 만들어낼 수도 있습니다.</p>
+
+<table>
+<tr><th colspan="2">타일</th><th style="width:60px">진입력</th><th>효과</th></tr>
+<tr><td style="width:54px"><svg viewBox="0 0 40 40" width="38" height="38"><rect x="2" y="2" width="36" height="36" rx="6" fill="#9CA894" stroke="#2B2622" stroke-width="1.5"/></svg></td><td><b>산</b></td><td style="text-align:center;font-weight:700">-</td><td>들어갈 수 없는 장벽. 곡사 공격의 '장애물'로도 쓰인다.</td></tr><tr><td style="width:54px"><svg viewBox="0 0 40 40" width="38" height="38"><rect x="2" y="2" width="36" height="36" rx="6" fill="#C9933E" stroke="#2B2622" stroke-width="1.5"/></svg></td><td><b>모래</b></td><td style="text-align:center;font-weight:700">2</td><td>진입에 이동력 2. 들어서면 모래 상태가 붙는다.</td></tr><tr><td style="width:54px"><svg viewBox="0 0 40 40" width="38" height="38"><rect x="2" y="2" width="36" height="36" rx="6" fill="#2D7DD2" stroke="#2B2622" stroke-width="1.5"/></svg></td><td><b>강</b></td><td style="text-align:center;font-weight:700">2</td><td>이동력 2로 지나갈 수 있으나 멈출 수 없다. 밀려 빠지면 모든 상태가 씻긴다.</td></tr><tr><td style="width:54px"><svg viewBox="0 0 40 40" width="38" height="38"><rect x="2" y="2" width="36" height="36" rx="6" fill="#7FB3DD" stroke="#2B2622" stroke-width="1.5"/></svg></td><td><b>물</b></td><td style="text-align:center;font-weight:700">1</td><td>들어서면 화염·산성이 씻겨 나간다.</td></tr><tr><td style="width:54px"><svg viewBox="0 0 40 40" width="38" height="38"><rect x="2" y="2" width="36" height="36" rx="6" fill="#E2492B" stroke="#2B2622" stroke-width="1.5"/></svg></td><td><b>불</b></td><td style="text-align:center;font-weight:700">1</td><td>매 턴 2 피해! 들어서면 화염이 붙는다.</td></tr><tr><td style="width:54px"><svg viewBox="0 0 40 40" width="38" height="38"><rect x="2" y="2" width="36" height="36" rx="6" fill="#76B82A" stroke="#2B2622" stroke-width="1.5"/></svg></td><td><b>산성</b></td><td style="text-align:center;font-weight:700">1</td><td>피해 없음. 들어서면 산성이 붙는다(받는 피해 2배).</td></tr><tr><td style="width:54px"><svg viewBox="0 0 40 40" width="38" height="38"><rect x="2" y="2" width="36" height="36" rx="6" fill="#EBB000" stroke="#2B2622" stroke-width="1.5"/></svg></td><td><b>감전</b></td><td style="text-align:center;font-weight:700">1</td><td>매 턴 1 피해. 들어서면 감전이 붙는다.</td></tr><tr><td style="width:54px"><svg viewBox="0 0 40 40" width="38" height="38"><rect x="2" y="2" width="36" height="36" rx="6" fill="#9AD7E2" stroke="#2B2622" stroke-width="1.5"/></svg></td><td><b>빙결</b></td><td style="text-align:center;font-weight:700">1</td><td>들어서면 기존 상태가 모두 지워지고 빙결된다.</td></tr>
+</table>
+
+<div class="cols" style="margin-top:8px">
+<div class="box ex"><span class="bt">▷ 지형을 무기로</span>
+속성 공격을 맞은 칸은 그 속성 지형으로 바뀝니다. 적 무리가 선 곳을 <b>불바다</b>로
+만들면 매 턴 그들의 체력이 깎여 나갑니다.</div>
+<div class="box tip"><span class="bt">◆ 강물 활용</span>
+넉백이나 끌어당기기로 적을 <b>강</b>에 빠뜨리면 적의 모든 강화 상태가 사라지고
+위치도 흐트러집니다. 강력한 견제 수단이죠.</div>
+</div>
+<div class="pageno">9</div><div class="pagefoot">PROJECT AB · 룰북</div></div><div class="page">
+<div class="sec-tag">11</div><div class="sec-h">유닛 도감 — 전위</div><div class="sec-rule"></div>
+<p style="margin-bottom:8px">전장을 지키는 <b>탱커</b>와 적진을 가르는 <b>전사</b>.
+체력·이동·아머는 ● 핍으로 표시됩니다.</p>
+<div class="cols">
+<div class="ucard">
+  <div class="uhead" style="background:#5A6570">
+    <div class="uemblem"><svg viewBox="0 0 64 64" width="48" height="48"><rect x="20" y="14" width="24" height="32" rx="4" fill="#7A8794"/><path d="M32 10 L46 16 V30 Q46 46 32 52 Q18 46 18 30 V16 Z" fill="#5A6570" stroke="#2B2622" stroke-width="2.5"/><path d="M32 18 V44 M22 26 H42" stroke="#D7DEE5" stroke-width="2.5"/></svg></div>
+    <div><div class="uname">강철방패</div><div class="uen">Steel Shield · t1</div></div>
+    <div class="uclass">탱커</div>
+  </div>
+  <div class="ubody">
+    <div class="ustats">
+      <div class="ustat">체력<span><svg viewBox="0 0 132 22" height="18"><circle cx="12" cy="11" r="7" fill="#9E2B25" stroke="#2B2622" stroke-width="1.6"/><circle cx="32" cy="11" r="7" fill="#9E2B25" stroke="#2B2622" stroke-width="1.6"/><circle cx="52" cy="11" r="7" fill="#9E2B25" stroke="#2B2622" stroke-width="1.6"/><circle cx="72" cy="11" r="7" fill="#9E2B25" stroke="#2B2622" stroke-width="1.6"/><circle cx="92" cy="11" r="7" fill="#9E2B25" stroke="#2B2622" stroke-width="1.6"/><circle cx="112" cy="11" r="7" fill="#9E2B25" stroke="#2B2622" stroke-width="1.6"/></svg></span></div>
+      <div class="ustat">이동<span><svg viewBox="0 0 72 22" height="18"><circle cx="12" cy="11" r="7" fill="#2D7DD2" stroke="#2B2622" stroke-width="1.6"/><circle cx="32" cy="11" r="7" fill="#2D7DD2" stroke="#2B2622" stroke-width="1.6"/><circle cx="52" cy="11" r="7" fill="#2D7DD2" stroke="#2B2622" stroke-width="1.6"/></svg></span></div>
+      <div class="ustat">아머<span><svg viewBox="0 0 52 22" height="18"><circle cx="12" cy="11" r="7" fill="#5A6570" stroke="#2B2622" stroke-width="1.6"/><circle cx="32" cy="11" r="7" fill="none" stroke="#2B2622" stroke-width="1.6"/></svg></span></div>
+    </div>
+    <div class="uweap">⚔ <b>방패 타격</b> · 근거리 · 사거리 1 · 피해 2</div>
+    <div class="uab"><span class="an">방패 방어 (패시브)</span> — 관통 공격이 나를 맞히면 내 뒤로 더 이상 뚫고 가지 못한다. 나는 피해를 받지만 동료는 보호된다.</div><div class="uab"><span class="an">타일 흡수 (패시브)</span> — 내가 선 칸에 속성이 깔려 있으면, 공격할 때 그 속성을 빨아들여 속성 공격을 날린다. 발밑은 평지로 정화된다.</div>
+    <div class="uflav">"전선의 벽. 아머 1로 1피해 공격을 완전히 막아낸다." <br><span style="color:#8A6512">◆ 관통 사수 앞을 막아서면 팀 전체를 지킬 수 있다.</span></div>
+  </div>
+</div>
+<div class="ucard">
+  <div class="uhead" style="background:#5A6570">
+    <div class="uemblem"><svg viewBox="0 0 64 64" width="48" height="48"><rect x="20" y="14" width="24" height="32" rx="4" fill="#7A8794"/><path d="M32 10 L46 16 V30 Q46 46 32 52 Q18 46 18 30 V16 Z" fill="#5A6570" stroke="#2B2622" stroke-width="2.5"/><path d="M32 18 V44 M22 26 H42" stroke="#D7DEE5" stroke-width="2.5"/></svg></div>
+    <div><div class="uname">철갑 방패</div><div class="uen">Iron Shield · t2</div></div>
+    <div class="uclass">탱커</div>
+  </div>
+  <div class="ubody">
+    <div class="ustats">
+      <div class="ustat">체력<span><svg viewBox="0 0 132 22" height="18"><circle cx="12" cy="11" r="7" fill="#9E2B25" stroke="#2B2622" stroke-width="1.6"/><circle cx="32" cy="11" r="7" fill="#9E2B25" stroke="#2B2622" stroke-width="1.6"/><circle cx="52" cy="11" r="7" fill="#9E2B25" stroke="#2B2622" stroke-width="1.6"/><circle cx="72" cy="11" r="7" fill="#9E2B25" stroke="#2B2622" stroke-width="1.6"/><circle cx="92" cy="11" r="7" fill="#9E2B25" stroke="#2B2622" stroke-width="1.6"/><circle cx="112" cy="11" r="7" fill="#9E2B25" stroke="#2B2622" stroke-width="1.6"/></svg></span></div>
+      <div class="ustat">이동<span><svg viewBox="0 0 72 22" height="18"><circle cx="12" cy="11" r="7" fill="#2D7DD2" stroke="#2B2622" stroke-width="1.6"/><circle cx="32" cy="11" r="7" fill="#2D7DD2" stroke="#2B2622" stroke-width="1.6"/><circle cx="52" cy="11" r="7" fill="#2D7DD2" stroke="#2B2622" stroke-width="1.6"/></svg></span></div>
+      <div class="ustat">아머<span><svg viewBox="0 0 52 22" height="18"><circle cx="12" cy="11" r="7" fill="#5A6570" stroke="#2B2622" stroke-width="1.6"/><circle cx="32" cy="11" r="7" fill="none" stroke="#2B2622" stroke-width="1.6"/></svg></span></div>
+    </div>
+    <div class="uweap">⚔ <b>방패 타격</b> · 근거리 · 사거리 1 · 피해 2</div>
+    <div class="uab"><span class="an">방패 방어 (패시브)</span> — 강철방패와 동일 — 관통 차단 + 발밑 속성 흡수.</div><div class="uab"><span class="an">끌어당기기 (1회 스킬)</span> — 직선 3칸 이내의 적 하나를 내 바로 앞으로 끌어온다. 피해는 없지만 게임당 한 번, 적의 진형을 무너뜨린다. 경로가 막혀 있으면 쓸 수 없다.</div>
+    <div class="uflav">"강철방패의 모든 특성에 더해, 적을 끌어오는 갈고리를 지녔다." <br><span style="color:#8A6512">◆ 원거리 딜러를 끌어와 우리 근접 유닛 사정권에 가둬라.</span></div>
+  </div>
+</div>
+<div class="ucard">
+  <div class="uhead" style="background:#C0552F">
+    <div class="uemblem"><svg viewBox="0 0 64 64" width="48" height="48"><path d="M32 6 L38 26 L32 50 L26 26 Z" fill="#C0552F" stroke="#2B2622" stroke-width="2.5"/><rect x="22" y="44" width="20" height="6" rx="2" fill="#8A3D22"/><circle cx="32" cy="30" r="3" fill="#FBF6EC"/></svg></div>
+    <div><div class="uname">돌격대원</div><div class="uen">Charger · f1</div></div>
+    <div class="uclass">전사</div>
+  </div>
+  <div class="ubody">
+    <div class="ustats">
+      <div class="ustat">체력<span><svg viewBox="0 0 132 22" height="18"><circle cx="12" cy="11" r="7" fill="#9E2B25" stroke="#2B2622" stroke-width="1.6"/><circle cx="32" cy="11" r="7" fill="#9E2B25" stroke="#2B2622" stroke-width="1.6"/><circle cx="52" cy="11" r="7" fill="#9E2B25" stroke="#2B2622" stroke-width="1.6"/><circle cx="72" cy="11" r="7" fill="#9E2B25" stroke="#2B2622" stroke-width="1.6"/><circle cx="92" cy="11" r="7" fill="none" stroke="#2B2622" stroke-width="1.6"/><circle cx="112" cy="11" r="7" fill="none" stroke="#2B2622" stroke-width="1.6"/></svg></span></div>
+      <div class="ustat">이동<span><svg viewBox="0 0 72 22" height="18"><circle cx="12" cy="11" r="7" fill="#2D7DD2" stroke="#2B2622" stroke-width="1.6"/><circle cx="32" cy="11" r="7" fill="#2D7DD2" stroke="#2B2622" stroke-width="1.6"/><circle cx="52" cy="11" r="7" fill="#2D7DD2" stroke="#2B2622" stroke-width="1.6"/></svg></span></div>
+      <div class="ustat">아머<span><span style=color:#A8987C>없음</span></span></div>
+    </div>
+    <div class="uweap">⚔ <b>돌진 베기</b> · 근거리 · 사거리 1~3 · 피해 2</div>
+    <div class="uab"><span class="an">돌진 (무기 내장)</span> — 직선 3칸 이내 적에게 곧장 달려가 벤다. 달려가는 길이 비어 있어야 하며, 이 돌진은 이동 행동을 소모하지 않는다.</div><div class="uab"><span class="an">넉백 (무기 내장)</span> — 베면서 대상을 1칸 밀어낸다. 벽·유닛·강에 부딪히면 추가 효과가 발생한다.</div>
+    <div class="uflav">"거리를 순식간에 좁히는 선봉. 적을 위험 지형으로 밀어넣는다." <br><span style="color:#8A6512">◆ 적을 불타는 칸이나 강으로 밀어내면 추가 이득이 크다.</span></div>
+  </div>
+</div>
+<div class="ucard">
+  <div class="uhead" style="background:#C0552F">
+    <div class="uemblem"><svg viewBox="0 0 64 64" width="48" height="48"><path d="M32 6 L38 26 L32 50 L26 26 Z" fill="#C0552F" stroke="#2B2622" stroke-width="2.5"/><rect x="22" y="44" width="20" height="6" rx="2" fill="#8A3D22"/><circle cx="32" cy="30" r="3" fill="#FBF6EC"/></svg></div>
+    <div><div class="uname">돌격대원 B</div><div class="uen">Charger B · f2</div></div>
+    <div class="uclass">전사</div>
+  </div>
+  <div class="ubody">
+    <div class="ustats">
+      <div class="ustat">체력<span><svg viewBox="0 0 132 22" height="18"><circle cx="12" cy="11" r="7" fill="#9E2B25" stroke="#2B2622" stroke-width="1.6"/><circle cx="32" cy="11" r="7" fill="#9E2B25" stroke="#2B2622" stroke-width="1.6"/><circle cx="52" cy="11" r="7" fill="#9E2B25" stroke="#2B2622" stroke-width="1.6"/><circle cx="72" cy="11" r="7" fill="#9E2B25" stroke="#2B2622" stroke-width="1.6"/><circle cx="92" cy="11" r="7" fill="none" stroke="#2B2622" stroke-width="1.6"/><circle cx="112" cy="11" r="7" fill="none" stroke="#2B2622" stroke-width="1.6"/></svg></span></div>
+      <div class="ustat">이동<span><svg viewBox="0 0 72 22" height="18"><circle cx="12" cy="11" r="7" fill="#2D7DD2" stroke="#2B2622" stroke-width="1.6"/><circle cx="32" cy="11" r="7" fill="#2D7DD2" stroke="#2B2622" stroke-width="1.6"/><circle cx="52" cy="11" r="7" fill="#2D7DD2" stroke="#2B2622" stroke-width="1.6"/></svg></span></div>
+      <div class="ustat">아머<span><span style=color:#A8987C>없음</span></span></div>
+    </div>
+    <div class="uweap">⚔ <b>돌진 베기</b> · 근거리 · 사거리 1~3 · 피해 2</div>
+    <div class="uab"><span class="an">돌진 (무기 내장)</span> — 돌격대원과 완전히 동일.</div><div class="uab"><span class="an">넉백 (무기 내장)</span> — 돌격대원과 완전히 동일.</div>
+    <div class="uflav">"돌격대원과 같은 훈련을 받은 쌍둥이 전사." <br><span style="color:#8A6512">◆ 두 돌격대원으로 적을 협공하면 넉백 콤보가 강력하다.</span></div>
+  </div>
+</div></div>
+<div class="pageno">10</div><div class="pagefoot">PROJECT AB · 룰북</div></div><div class="page">
+<div class="sec-tag">11</div><div class="sec-h">유닛 도감 — 후위</div><div class="sec-rule"></div>
+<p style="margin-bottom:8px">거리를 지배하는 <b>레인저</b>와 지형을 다루는 <b>브루트</b>.
+같은 계열이라도 능력이 미묘하게 다르니 조합을 연구해 보세요.</p>
+<div class="cols">
+<div class="ucard">
+  <div class="uhead" style="background:#5E7C3A">
+    <div class="uemblem"><svg viewBox="0 0 64 64" width="48" height="48"><path d="M44 10 Q22 32 44 54" fill="none" stroke="#5E7C3A" stroke-width="4" stroke-linecap="round"/><line x1="44" y1="10" x2="44" y2="54" stroke="#2B2622" stroke-width="2" stroke-dasharray="3 3"/><path d="M16 32 H46 M40 26 L48 32 L40 38" fill="none" stroke="#3F5226" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div><div class="uname">화살사수</div><div class="uen">Archer · r1</div></div>
+    <div class="uclass">레인저</div>
+  </div>
+  <div class="ubody">
+    <div class="ustats">
+      <div class="ustat">체력<span><svg viewBox="0 0 132 22" height="18"><circle cx="12" cy="11" r="7" fill="#9E2B25" stroke="#2B2622" stroke-width="1.6"/><circle cx="32" cy="11" r="7" fill="#9E2B25" stroke="#2B2622" stroke-width="1.6"/><circle cx="52" cy="11" r="7" fill="#9E2B25" stroke="#2B2622" stroke-width="1.6"/><circle cx="72" cy="11" r="7" fill="#9E2B25" stroke="#2B2622" stroke-width="1.6"/><circle cx="92" cy="11" r="7" fill="none" stroke="#2B2622" stroke-width="1.6"/><circle cx="112" cy="11" r="7" fill="none" stroke="#2B2622" stroke-width="1.6"/></svg></span></div>
+      <div class="ustat">이동<span><svg viewBox="0 0 72 22" height="18"><circle cx="12" cy="11" r="7" fill="#2D7DD2" stroke="#2B2622" stroke-width="1.6"/><circle cx="32" cy="11" r="7" fill="#2D7DD2" stroke="#2B2622" stroke-width="1.6"/><circle cx="52" cy="11" r="7" fill="none" stroke="#2B2622" stroke-width="1.6"/></svg></span></div>
+      <div class="ustat">아머<span><span style=color:#A8987C>없음</span></span></div>
+    </div>
+    <div class="uweap">⚔ <b>관통 흡수궁</b> · 원거리 · 사거리 2~3 · 피해 2 · 관통</div>
+    <div class="uab"><span class="an">관통 (무기 내장)</span> — 화살이 첫 대상을 꿰뚫고 같은 직선의 뒷칸까지 피해를 준다. 방패 유닛에 막히면 거기서 멈춘다.</div><div class="uab"><span class="an">타일 흡수 (조준 시 선택)</span> — 쏘기 직전 내 인접 칸의 속성을 선택해 화살에 입힐 수 있다. 그 칸은 평지가 되고, 적과 적이 선 칸이 그 속성으로 물든다.</div>
+    <div class="uflav">"사거리 2~3의 저격수. 인접 지형을 무기로 바꾼다 (단, 코앞은 못 쏜다)." <br><span style="color:#8A6512">◆ 불 칸 옆에서 쏘면 화염 화살이 되어 적을 점화시킨다.</span></div>
+  </div>
+</div>
+<div class="ucard">
+  <div class="uhead" style="background:#5E7C3A">
+    <div class="uemblem"><svg viewBox="0 0 64 64" width="48" height="48"><path d="M44 10 Q22 32 44 54" fill="none" stroke="#5E7C3A" stroke-width="4" stroke-linecap="round"/><line x1="44" y1="10" x2="44" y2="54" stroke="#2B2622" stroke-width="2" stroke-dasharray="3 3"/><path d="M16 32 H46 M40 26 L48 32 L40 38" fill="none" stroke="#3F5226" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div><div class="uname">레인저 B</div><div class="uen">Ranger B · r2</div></div>
+    <div class="uclass">레인저</div>
+  </div>
+  <div class="ubody">
+    <div class="ustats">
+      <div class="ustat">체력<span><svg viewBox="0 0 132 22" height="18"><circle cx="12" cy="11" r="7" fill="#9E2B25" stroke="#2B2622" stroke-width="1.6"/><circle cx="32" cy="11" r="7" fill="#9E2B25" stroke="#2B2622" stroke-width="1.6"/><circle cx="52" cy="11" r="7" fill="#9E2B25" stroke="#2B2622" stroke-width="1.6"/><circle cx="72" cy="11" r="7" fill="#9E2B25" stroke="#2B2622" stroke-width="1.6"/><circle cx="92" cy="11" r="7" fill="none" stroke="#2B2622" stroke-width="1.6"/><circle cx="112" cy="11" r="7" fill="none" stroke="#2B2622" stroke-width="1.6"/></svg></span></div>
+      <div class="ustat">이동<span><svg viewBox="0 0 72 22" height="18"><circle cx="12" cy="11" r="7" fill="#2D7DD2" stroke="#2B2622" stroke-width="1.6"/><circle cx="32" cy="11" r="7" fill="#2D7DD2" stroke="#2B2622" stroke-width="1.6"/><circle cx="52" cy="11" r="7" fill="none" stroke="#2B2622" stroke-width="1.6"/></svg></span></div>
+      <div class="ustat">아머<span><span style=color:#A8987C>없음</span></span></div>
+    </div>
+    <div class="uweap">⚔ <b>관통 강궁</b> · 원거리 · 사거리 2~3 · 피해 2 · 관통</div>
+    <div class="uab"><span class="an">관통 (무기 내장)</span> — 화살사수와 동일 — 직선 관통, 방패에 차단.</div><div class="uab"><span class="an">넉백 (무기 내장)</span> — 첫 대상을 1칸 밀어낸다. 멀리서 적을 위험 지형으로 밀 수 있다.</div>
+    <div class="uflav">"흡수 대신 밀어내기를 택한 저격수. 원거리에서 적 진형을 흔든다." <br><span style="color:#8A6512">◆ 사거리 밖에서 적을 강가로 밀어 빠뜨려라.</span></div>
+  </div>
+</div>
+<div class="ucard">
+  <div class="uhead" style="background:#8A5A3C">
+    <div class="uemblem"><svg viewBox="0 0 64 64" width="48" height="48"><circle cx="32" cy="32" r="20" fill="#8A5A3C" stroke="#2B2622" stroke-width="2.5"/><path d="M32 14 V50 M14 32 H50 M20 20 L44 44 M44 20 L20 44" stroke="#5E3A24" stroke-width="3"/><circle cx="32" cy="32" r="7" fill="#C98A5C"/></svg></div>
+    <div><div class="uname">화염 브루트</div><div class="uen">Flame Brute · b1</div></div>
+    <div class="uclass">브루트</div>
+  </div>
+  <div class="ubody">
+    <div class="ustats">
+      <div class="ustat">체력<span><svg viewBox="0 0 132 22" height="18"><circle cx="12" cy="11" r="7" fill="#9E2B25" stroke="#2B2622" stroke-width="1.6"/><circle cx="32" cy="11" r="7" fill="#9E2B25" stroke="#2B2622" stroke-width="1.6"/><circle cx="52" cy="11" r="7" fill="#9E2B25" stroke="#2B2622" stroke-width="1.6"/><circle cx="72" cy="11" r="7" fill="#9E2B25" stroke="#2B2622" stroke-width="1.6"/><circle cx="92" cy="11" r="7" fill="#9E2B25" stroke="#2B2622" stroke-width="1.6"/><circle cx="112" cy="11" r="7" fill="none" stroke="#2B2622" stroke-width="1.6"/></svg></span></div>
+      <div class="ustat">이동<span><svg viewBox="0 0 72 22" height="18"><circle cx="12" cy="11" r="7" fill="#2D7DD2" stroke="#2B2622" stroke-width="1.6"/><circle cx="32" cy="11" r="7" fill="#2D7DD2" stroke="#2B2622" stroke-width="1.6"/><circle cx="52" cy="11" r="7" fill="#2D7DD2" stroke="#2B2622" stroke-width="1.6"/></svg></span></div>
+      <div class="ustat">아머<span><span style=color:#A8987C>없음</span></span></div>
+    </div>
+    <div class="uweap">⚔ <b>냉수 강타</b> · 근거리 · 사거리 1~2 · 피해 1 · 물 속성</div>
+    <div class="uab"><span class="an">불꽃 흡수 (패시브)</span> — 불타는 칸에 들어서면 그 불을 꺼서 평지로 만들고 체력을 1 회복한다. 불 위를 안전지대로 바꾼다.</div><div class="uab"><span class="an">냉수 강타 (무기)</span> — 물 속성 공격. 맞은 적의 화염을 끄고, 그 칸을 물로 적신다.</div>
+    <div class="uflav">"불을 먹고 사는 거구. 화염 전장이 그의 회복터가 된다." <br><span style="color:#8A6512">◆ 적이 깔아둔 불바다를 가로지르며 체력을 채워라.</span></div>
+  </div>
+</div>
+<div class="ucard">
+  <div class="uhead" style="background:#8A5A3C">
+    <div class="uemblem"><svg viewBox="0 0 64 64" width="48" height="48"><circle cx="32" cy="32" r="20" fill="#8A5A3C" stroke="#2B2622" stroke-width="2.5"/><path d="M32 14 V50 M14 32 H50 M20 20 L44 44 M44 20 L20 44" stroke="#5E3A24" stroke-width="3"/><circle cx="32" cy="32" r="7" fill="#C98A5C"/></svg></div>
+    <div><div class="uname">면역 브루트</div><div class="uen">Warden Brute · b2</div></div>
+    <div class="uclass">브루트</div>
+  </div>
+  <div class="ubody">
+    <div class="ustats">
+      <div class="ustat">체력<span><svg viewBox="0 0 132 22" height="18"><circle cx="12" cy="11" r="7" fill="#9E2B25" stroke="#2B2622" stroke-width="1.6"/><circle cx="32" cy="11" r="7" fill="#9E2B25" stroke="#2B2622" stroke-width="1.6"/><circle cx="52" cy="11" r="7" fill="#9E2B25" stroke="#2B2622" stroke-width="1.6"/><circle cx="72" cy="11" r="7" fill="#9E2B25" stroke="#2B2622" stroke-width="1.6"/><circle cx="92" cy="11" r="7" fill="#9E2B25" stroke="#2B2622" stroke-width="1.6"/><circle cx="112" cy="11" r="7" fill="none" stroke="#2B2622" stroke-width="1.6"/></svg></span></div>
+      <div class="ustat">이동<span><svg viewBox="0 0 72 22" height="18"><circle cx="12" cy="11" r="7" fill="#2D7DD2" stroke="#2B2622" stroke-width="1.6"/><circle cx="32" cy="11" r="7" fill="#2D7DD2" stroke="#2B2622" stroke-width="1.6"/><circle cx="52" cy="11" r="7" fill="#2D7DD2" stroke="#2B2622" stroke-width="1.6"/></svg></span></div>
+      <div class="ustat">아머<span><span style=color:#A8987C>없음</span></span></div>
+    </div>
+    <div class="uweap">⚔ <b>강타</b> · 근거리 · 사거리 1~2 · 피해 1</div>
+    <div class="uab"><span class="an">완전 면역 (패시브)</span> — 어떤 타일 효과도, 지형 지속 피해도, 공격에 실린 원소 효과도 그에게는 통하지 않는다.</div><div class="uab"><span class="an">속성 전파 (패시브)</span> — 속성 칸에 들어서면 그 속성을 사방 인접 칸으로 퍼뜨린다. 자신은 멀쩡한 채 전장을 오염시킨다.</div>
+    <div class="uflav">"지형을 두려워하지 않는 파괴자. 밟는 곳마다 속성이 번진다." <br><span style="color:#8A6512">◆ 독·불 위를 걸으며 적 발밑까지 오염을 퍼뜨려라.</span></div>
+  </div>
+</div></div>
+<div class="pageno">11</div><div class="pagefoot">PROJECT AB · 룰북</div></div><div class="page">
+<div class="sec-tag">12 · 13</div><div class="sec-h">승리 조건과 요약</div><div class="sec-rule"></div>
+<div class="cols">
+<h3 class="sub" style="margin-top:0">승리 조건</h3>
+<ul>
+<li><b>전멸 승리</b> — 상대의 모든 유닛을 쓰러뜨리면 즉시 승리.</li>
+<li><b>항복</b> — 상대가 항복하면 승리.</li>
+<li><b>30라운드 종료</b> — 살아남은 유닛 수가 많은 쪽이 승리. 같으면 <b>무승부</b>.</li>
+</ul>
+
+<h3 class="sub">한눈에 보는 요약</h3>
+<div class="box tip"><span class="bt">◆ 턴 순서</span>
+이동(선택) → 공격(선택). <b>공격하면 턴 종료.</b> 공격 후 이동 불가.</div>
+<div class="box tip"><span class="bt">◆ 거리</span>
+상하좌우 직선만. 대각선 없음. 거리는 가로+세로 칸수.</div>
+<div class="box tip"><span class="bt">◆ 피해</span>
+무기 피해 − 아머 (최소 0) → 반응 배율 → 산성이면 ×2.</div>
+<div class="box warn"><span class="bt">⚠ 잊기 쉬운 규칙</span>
+① 강 위엔 멈출 수 없다. ② 산은 통과 불가. ③ 빙결은 모든 행동 차단 + 기존 상태 제거.
+④ 다른 유닛이 선 칸은 지나갈 수 없다.</div>
+
+<h3 class="sub">속성 반응 빠른표</h3>
+<table style="font-size:9pt">
+<tr><th>공격</th><th>대상</th><th>결과</th></tr>
+<tr><td>화염</td><td>빙결</td><td>해제(피해 0)</td></tr>
+<tr><td>물/빙결</td><td>화염</td><td>화염 제거</td></tr>
+<tr><td>아무거나</td><td>산성</td><td>피해 ×2</td></tr>
+</table>
+</div>
+
+<div style="position:absolute;bottom:20mm;left:0;right:0;text-align:center;color:#B8893B;font-weight:700;letter-spacing:3px;font-size:11pt">
+— 전장에서 만납시다, 지휘관 —
+</div>
+<div class="pageno">12</div><div class="pagefoot">PROJECT AB · 룰북</div></div></body></html>
