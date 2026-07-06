@@ -13,7 +13,7 @@ export const DialogueCharacterLayoutSchema = z.object({
 });
 export type DialogueCharacterLayout = z.infer<typeof DialogueCharacterLayoutSchema>;
 
-export const DialoguePortraitMapSchema = z.record(z.string().min(1));
+export const DialoguePortraitMapSchema = z.record(z.string().min(1), z.string().min(1));
 export type DialoguePortraitMap = z.infer<typeof DialoguePortraitMapSchema>;
 
 export const DialogueCharacterMetaSchema = z.object({
