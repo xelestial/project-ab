@@ -51,6 +51,7 @@ export const ErrorCode = {
   UNKNOWN_WEAPON: "error.unknown.weapon",
   UNKNOWN_EFFECT: "error.unknown.effect",
   UNKNOWN_MAP: "error.unknown.map",
+  UNKNOWN_DIALOGUE_CHARACTER: "error.unknown.dialogue_character",
 } as const;
 
 export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode];
