@@ -32,6 +32,9 @@ export * from "./loop/game-loop.js";
 export * from "./context/game-context.js";
 export * from "./context/game-factory.js";
 
+// ─── Narrative ────────────────────────────────────────────────────────────────
+export * from "./narrative/dialogue-actor-resolver.js";
+
 // ─── Support ──────────────────────────────────────────────────────────────────
 export * from "./support/event-bus.js";
 export * from "./support/game-logger.js";
