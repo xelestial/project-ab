@@ -1,0 +1,6 @@
+[
+  { "unitMetaId": "t1", "characterId": "char_t1", "canSpeak": true },
+  { "unitMetaId": "f1", "characterId": "char_f1", "canSpeak": true },
+  { "unitMetaId": "r1", "characterId": "char_r1", "canSpeak": true },
+  { "unitMetaId": "obstacle_electric_pylon", "canSpeak": false }
+]
