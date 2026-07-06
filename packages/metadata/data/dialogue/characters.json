@@ -1,0 +1,38 @@
+[
+  {
+    "id": "char_t1",
+    "displayNameKey": "unit.t1.name",
+    "thumbnailKey": "unit_tanker_a_thumb",
+    "portraits": {
+      "normal": "dlg_t1_normal",
+      "injured": "dlg_t1_injured",
+      "angry": "dlg_t1_angry"
+    },
+    "defaultEmotion": "normal",
+    "layout": { "offsetX": 0, "offsetY": 0, "scale": 1 }
+  },
+  {
+    "id": "char_f1",
+    "displayNameKey": "unit.f1.name",
+    "thumbnailKey": "unit_fighter_a_thumb",
+    "portraits": {
+      "normal": "dlg_f1_normal",
+      "injured": "dlg_f1_injured",
+      "angry": "dlg_f1_angry"
+    },
+    "defaultEmotion": "normal",
+    "layout": { "offsetX": 0, "offsetY": 0, "scale": 1 }
+  },
+  {
+    "id": "char_r1",
+    "displayNameKey": "unit.r1.name",
+    "thumbnailKey": "unit_ranger_a_thumb",
+    "portraits": {
+      "normal": "dlg_r1_normal",
+      "injured": "dlg_r1_injured",
+      "angry": "dlg_r1_angry"
+    },
+    "defaultEmotion": "normal",
+    "layout": { "offsetX": 0, "offsetY": 0, "scale": 1 }
+  }
+]
