@@ -18,6 +18,14 @@ import {
   ElementalReactionSchema,
   UnitPassiveMetaSchema,
 } from "./schemas/metadata.js";
+import type {
+  DialogueCharacterMeta,
+  UnitDialogueBinding,
+} from "./schemas/dialogue.js";
+import {
+  DialogueCharacterMetaSchema,
+  UnitDialogueBindingSchema,
+} from "./schemas/dialogue.js";
 import { ErrorCode } from "./error-codes.js";
 import { getText } from "./i18n.js";
 
@@ -44,6 +52,11 @@ export interface IDataRegistry {
 
   getUnitPassive(id: string): UnitPassiveMeta;
   getUnitPassives(unitMetaId: string): readonly UnitPassiveMeta[];
+
+  getDialogueCharacter(id: string): DialogueCharacterMeta;
+  getDialogueBindingForUnit(unitMetaId: string): UnitDialogueBinding | undefined;
+  getAllDialogueCharacters(): readonly DialogueCharacterMeta[];
+  getAllUnitDialogueBindings(): readonly UnitDialogueBinding[];
 }
 
 // ─── RegistryError ────────────────────────────────────────────────────────────
@@ -70,6 +83,8 @@ export class DataRegistry implements IDataRegistry {
   private readonly maps = new Map<string, MapMeta>();
   private readonly elementalReactions: ElementalReaction[] = [];
   private readonly unitPassives = new Map<string, UnitPassiveMeta>();
+  private readonly dialogueCharacters = new Map<string, DialogueCharacterMeta>();
+  private readonly unitDialogueBindings = new Map<string, UnitDialogueBinding>();
 
   // ── Loading ────────────────────────────────────────────────────────────────
 
@@ -126,6 +141,20 @@ export class DataRegistry implements IDataRegistry {
     for (const item of raw) {
       const parsed = UnitPassiveMetaSchema.parse(item);
       this.unitPassives.set(parsed.id, parsed);
+    }
+  }
+
+  loadDialogueCharacters(raw: unknown[]): void {
+    for (const item of raw) {
+      const parsed = DialogueCharacterMetaSchema.parse(item);
+      this.dialogueCharacters.set(parsed.id, parsed);
+    }
+  }
+
+  loadUnitDialogueBindings(raw: unknown[]): void {
+    for (const item of raw) {
+      const parsed = UnitDialogueBindingSchema.parse(item);
+      this.unitDialogueBindings.set(parsed.unitMetaId, parsed);
     }
   }
 
@@ -199,6 +228,18 @@ export class DataRegistry implements IDataRegistry {
     });
   }
 
+  getDialogueCharacter(id: string): DialogueCharacterMeta {
+    const v = this.dialogueCharacters.get(id);
+    if (v === undefined) {
+      throw new RegistryError(ErrorCode.UNKNOWN_DIALOGUE_CHARACTER, id, "DialogueCharacterMeta");
+    }
+    return v;
+  }
+
+  getDialogueBindingForUnit(unitMetaId: string): UnitDialogueBinding | undefined {
+    return this.unitDialogueBindings.get(unitMetaId);
+  }
+
   // ── Collection getters ──────────────────────────────────────────────────────
 
   getAllUnits(): readonly UnitMeta[] {
@@ -223,6 +264,14 @@ export class DataRegistry implements IDataRegistry {
 
   getAllMaps(): readonly MapMeta[] {
     return [...this.maps.values()];
+  }
+
+  getAllDialogueCharacters(): readonly DialogueCharacterMeta[] {
+    return [...this.dialogueCharacters.values()];
+  }
+
+  getAllUnitDialogueBindings(): readonly UnitDialogueBinding[] {
+    return [...this.unitDialogueBindings.values()];
   }
 
   // ── Utility ────────────────────────────────────────────────────────────────
@@ -271,6 +320,8 @@ export function buildDataRegistry(data: {
   maps: unknown[];
   elementalReactions?: unknown[];
   unitPassives?: unknown[];
+  dialogueCharacters?: unknown[];
+  unitDialogueBindings?: unknown[];
 }): DataRegistry {
   const reg = new DataRegistry();
   reg.loadWeapons(data.weapons);
@@ -284,6 +335,12 @@ export function buildDataRegistry(data: {
   }
   if (data.unitPassives !== undefined) {
     reg.loadUnitPassives(data.unitPassives);
+  }
+  if (data.dialogueCharacters !== undefined) {
+    reg.loadDialogueCharacters(data.dialogueCharacters);
+  }
+  if (data.unitDialogueBindings !== undefined) {
+    reg.loadUnitDialogueBindings(data.unitDialogueBindings);
   }
   return reg;
 }
